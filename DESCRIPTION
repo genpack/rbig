@@ -1,0 +1,18 @@
+Package: biger
+Type: Package
+Title: A toolbox for R programmers for working with huge tables and data-frames.
+Version: 1.0.0
+Date: 05 August 2013
+Author: Nicolas Berta
+Maintainer: Nicolas Berta <nicolas.berta@gmail.com>
+Description: This package provides a useful general library of R functions 
+  required for working with huge tables (big data).
+  This packages provides a reference class named WIDETABLE which can be used for
+  working with huge data frames having numerous columns.
+License: MIT
+LazyData: TRUE
+Collate: 
+    'biger.R'
+    'io.R'
+    'wt.R'
+RoxygenNote: 6.1.1
