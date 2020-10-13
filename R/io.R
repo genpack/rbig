@@ -6,24 +6,24 @@
 # Email :        nicolas.berta@gmail.com
 # Start Date:    28 October 2016
 # Last Revision: 17 July 2019
-# Version:       2.0.1
+# Version:       1.0.1
 
 # Version History:
 
 # Version   Date               Action
 # ----------------------------------
-# 1.0.0     28 October 2016    Initial Issue: Started with function readODBC().
-# 1.1.0     21 November 2016   Added filters to function readODBC().
-# 1.2.0     01 December 2016   Function sqlFilter() generates script for filtering. Functions sqlFilterComponent.*() removed.
-# 1.2.1     01 December 2016   Function sqlScript() generates complete sql query.
-# 1.2.2     01 December 2016   Function readODBC() calls sqlScript() first to generate the query and then executes the query.
-# 1.2.3     24 January 2017    Function readODBC() transfers additional arguments passed to function sqlQuery() in package RODBC.
-# 1.3.0     17 May 2017        Function rScriptFilter() added, converts a filter into a R script of a condition
-# 1.3.1     01 August 2017     Function rScriptFilter() exported.
-# 1.3.2     15 May 2018        Function sqlScript() modified: changes column names with 'AS' if argument 'fields' is a named vector
-# 1.3.3     12 September 2018  Function runSQL() added
-# 2.0.0     26 June 2019       spark and athena tools and AGGERGATOR module added.
-# 2.0.1     17 July 2019       Function sqlFilter() modified: small bug fixed.
+# 0.0.0     28 October 2016    Initial Issue: Started with function readODBC().
+# 0.1.0     21 November 2016   Added filters to function readODBC().
+# 0.2.0     01 December 2016   Function sqlFilter() generates script for filtering. Functions sqlFilterComponent.*() removed.
+# 0.2.1     01 December 2016   Function sqlScript() generates complete sql query.
+# 0.2.2     01 December 2016   Function readODBC() calls sqlScript() first to generate the query and then executes the query.
+# 0.2.3     24 January 2017    Function readODBC() transfers additional arguments passed to function sqlQuery() in package RODBC.
+# 0.3.0     17 May 2017        Function rScriptFilter() added, converts a filter into a R script of a condition
+# 0.3.1     01 August 2017     Function rScriptFilter() exported.
+# 0.3.2     15 May 2018        Function sqlScript() modified: changes column names with 'AS' if argument 'fields' is a named vector
+# 0.3.3     12 September 2018  Function runSQL() added
+# 1.0.0     26 June 2019       spark and athena tools and AGGERGATOR module added.
+# 1.0.1     17 July 2019       Function sqlFilter() modified: small bug fixed.
 
 
 ################## ODBC TOOLS: ###############################

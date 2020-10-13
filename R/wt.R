@@ -1,3 +1,9 @@
+# Version History:
+
+# Version   Date               Action
+# -----------------------------------
+# 1.0.2     13 October 2020    Initial Issue
+
 ################## WIDE TABLES: ##################
 WIDETABLE = setRefClass(
   'WIDETABLE', 
@@ -225,12 +231,13 @@ setMethod("as.data.frame", "WIDETABLE", function(x) {
   return(out %>% as.data.frame)
 })
 
-
+#' @export
 '[[.WIDETABLE' = function(obj, figure = NULL){
   figure %>% verify('character', domain = colnames(obj), lengths = 1)
   return(obj$load_column(figure))
 }
 
+#' @export
 '[.WIDETABLE'   = function(obj, rows = NULL, figures = NULL, drop = T){
   if(inherits(rows, 'logical')){rows = which(rows)}
   if(inherits(figures, 'logical')){figures = which(figures)}
