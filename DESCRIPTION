@@ -1,4 +1,4 @@
-Package: biger
+Package: rbig
 Type: Package
 Title: A toolbox for R programmers for working with huge tables and data-frames.
 Version: 1.0.0
@@ -12,7 +12,7 @@ Description: This package provides a useful general library of R functions
 License: MIT
 LazyData: TRUE
 Collate: 
-    'biger.R'
+    'rbig.R'
     'io.R'
     'wt.R'
 RoxygenNote: 6.1.1
