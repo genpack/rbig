@@ -1,8 +1,8 @@
 Package: rbig
 Type: Package
 Title: A toolbox for R programmers for working with huge tables and data-frames.
-Version: 1.0.2
-Date: 13 October 2020
+Version: 1.0.6
+Date: 04 November 2020
 Author: Nicolas Berta
 Maintainer: Nicolas Berta <nicolas.berta@gmail.com>
 Description: This package provides a useful general library of R functions 
@@ -12,7 +12,7 @@ Description: This package provides a useful general library of R functions
 License: MIT
 LazyData: TRUE
 Collate: 
-    'rbig.R'
     'io.R'
     'wt.R'
+    'rbig.R'
 RoxygenNote: 6.1.1

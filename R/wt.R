@@ -2,9 +2,12 @@
 
 # Version   Date               Action
 # -----------------------------------
-# 1.0.2     13 October 2020    Initial Issue
+# 1.0.4     13 October 2020    Initial Issue
+# 1.0.5     13 October 2020    generic methods exported
 
 ################## WIDE TABLES: ##################
+#' @export WIDETABLE
+#' @exportClass WIDETABLE
 WIDETABLE = setRefClass(
   'WIDETABLE', 
   fields  = list(name = "character", path = "character", meta = 'data.frame', data = 'data.frame', 
@@ -205,22 +208,30 @@ rbind.WIDETABLE = function(x, y){
 }
 
 # Generic Functions:
+
+#' @export
 setMethod("names", "WIDETABLE", function(x) x$meta$column %>% unique %>% as.character)
+
+#' @export
 setMethod("colnames", "WIDETABLE", function(x) x$meta$column %>% unique %>% as.character)
+
+#' @export
 setMethod("nrow", "WIDETABLE", function(x) length(x$row_index))
+
+#' @export
 setMethod("ncol", "WIDETABLE", function(x) x$meta$column %>% unique %>% length)
 
 # setMethod("head", "WIDETABLE", function(x, ...) head(x$data, ...))
 # setMethod("tail", "WIDETABLE", function(x, ...) tail(x$data, ...))
+#' @export
 setMethod("dim", "WIDETABLE", function(x) c(length(x$row_index), x$numcols))
+
 # setMethod("colSums", "WIDETABLE", function(x) colSums(x$data))
 # setMethod("rowSums", "WIDETABLE", function(x) rowSums(x$data))
 # setMethod("length", "WIDETABLE", function(x) length(x$time))
 # setMethod("show", "WIDETABLE", function(object) show(object$data))
-setMethod("as.matrix", "WIDETABLE", function(x) {
-  return(as.data.frame(x) %>% as.matrix)
-})
 
+#' @export
 setMethod("as.data.frame", "WIDETABLE", function(x) {
   columns = x$meta$column %>% unique
   out    = NULL
@@ -229,6 +240,11 @@ setMethod("as.data.frame", "WIDETABLE", function(x) {
     else {out %<>% cbind(x$load_column(cn))}
   }
   return(out %>% as.data.frame)
+})
+
+#' @export
+setMethod("as.matrix", "WIDETABLE", function(x) {
+  return(as.data.frame(x) %>% as.matrix)
 })
 
 #' @export
@@ -258,9 +274,9 @@ setMethod("as.data.frame", "WIDETABLE", function(x) {
   if(obj$cell_size*nrw*ncl > obj$size_limit) {
     out = obj$copy()
     out$meta %<>% filter(column %in% figures)
-    out$data      <- obj$data[obj$meta$column %^% names(obj$data)]
     out$numcols   <- out$meta$column %>% unique %>% length
     out$row_index <- chif(is.null(rows), obj$row_index, obj$row_index[rows])
+    out$data      <- obj$data[rows, obj$meta$column %^% names(obj$data)]
     return(out)
   }
   
