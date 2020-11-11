@@ -6,6 +6,9 @@
 # 1.0.4 (13 October 2020)    - Second Issue WideTable added
 # 1.0.5 (13 October 2020)    - wt.R updated
 # 1.0.6 (04 November 2020)   - wt.R updated. Method '[.WIDETABLE' changed. Issue fixed.
+# 1.0.7 (05 November 2020)   - wt.R updated. Method as.matrix() and as.data.frame() changed.
+# 1.0.9 (05 November 2020)   - wt.R updated. Values of each column in meta table are updated for columns in data when a new copy is created 
+# 1.1.0 (11 November 2020)   - wt.R updated. Function extract.widetable() added 
 # Description for Roxygen
 
 #' rbig

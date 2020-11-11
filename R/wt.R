@@ -150,6 +150,7 @@ WIDETABLE = setRefClass(
       gc()
     },
     
+    # Revisit this function. Maybe use load_columns or '[WIDETABLE' functions
     rbind_dataframe = function(df){
       # For now:
       columns = colnames(df)
@@ -167,6 +168,7 @@ WIDETABLE = setRefClass(
       gc()
     },
     
+    # Revisit this function. 
     leftjoin_dataframe = function(df, by){
       verify(by, 'character', domain = meta$column %^% colnames(df))
       tbl = load_columns(by)
@@ -228,29 +230,73 @@ setMethod("dim", "WIDETABLE", function(x) c(length(x$row_index), x$numcols))
 
 # setMethod("colSums", "WIDETABLE", function(x) colSums(x$data))
 # setMethod("rowSums", "WIDETABLE", function(x) rowSums(x$data))
-# setMethod("length", "WIDETABLE", function(x) length(x$time))
+setMethod("length", "WIDETABLE", function(x) x$meta$column %>% unique %>% length)
 # setMethod("show", "WIDETABLE", function(object) show(object$data))
 
 #' @export
 setMethod("as.data.frame", "WIDETABLE", function(x) {
-  columns = x$meta$column %>% unique
-  out    = NULL
-  for(cn in columns){
-    if(is.null(out)) {out = x$load_column(cn)}
-    else {out %<>% cbind(x$load_column(cn))}
-  }
-  return(out %>% as.data.frame)
+  x$load_columns(colnames(x)) %>% as.data.frame
 })
+
+# setMethod("as.data.frame", "WIDETABLE", function(x) {
+#   out    = NULL
+#   for(cn in colnames(x)){
+#     if(is.null(out)) {out = x$load_column(cn)}
+#     else {out %<>% cbind(x$load_column(cn))}
+#   }
+#   out %<>% as.data.frame
+#   colnames(out) <- colnames(x)
+#   return(out)
+# })
 
 #' @export
 setMethod("as.matrix", "WIDETABLE", function(x) {
-  return(as.data.frame(x) %>% as.matrix)
+  
+  # return(as.data.frame(x) %>% as.matrix)
+  # Test if this is faster:
+  x$load_columns(colnames(x)) %>% as.matrix  
 })
 
 #' @export
 '[[.WIDETABLE' = function(obj, figure = NULL){
   figure %>% verify('character', domain = colnames(obj), lengths = 1)
   return(obj$load_column(figure))
+}
+
+#' @export
+extract.widetable = function(obj, rows, figures){
+  out = obj$copy()
+  # todo (important): some columns in the meta table (like n_uniue) depend on the row subset
+  # fix this issue asap, 
+  # 1- If we have a subset of rows in the new table, values of each column in meta table should become NA for columns which are not read (Done)
+  # 2- values of each column in meta table can be update here for columns in data (Done)
+  
+  # 3- meta update shall be embedded in load_column and load_columns() methods as well, 
+  #    so that everytime the column is read, meta becomes updated!
+  # 4- add, sum, mean, max, min, sd, var and some moments to the meta
+  # 5- similar values for rows (a meta table for rows is required!)
+  out$meta %<>% filter(column %in% figures)
+  out$numcols   <- out$meta$column %>% unique %>% length
+  if(is.null(rows)){
+    out$row_index <- obj$row_index
+    out$data      <- obj$data[, obj$meta$column %^% names(obj$data), drop = F]
+  } else {
+    out$meta$n_unique = NA
+    # removing memsize causes error in '[.WIDETABLE' method. 
+    # out$meta$memsize  = NA
+    out$row_index <- obj$row_index[rows]
+    out$data      <- obj$data[rows, obj$meta$column %^% names(obj$data), drop = F]
+    data_columns  <- colnames(out$data)
+    for(i in sequence(nrow(out$meta))){
+      if(out$meta$column[i] %in% data_columns){
+        vec = out$data[[out$meta$column[i]]]
+        out$meta$n_unique[i] <- length(unique(vec))
+        out$meta$memsize[i]  <- object.size(vec) 
+      }
+    }
+  }
+  
+  return(out)
 }
 
 #' @export
@@ -265,19 +311,14 @@ setMethod("as.matrix", "WIDETABLE", function(x) {
       figures = colnames(obj)
     }
   }
-  if(inherits(figures, 'integer')){figures = obj$meta$column[figures]} 
-  else figures = figures %>% unique %>% verify('character', domain = obj$meta$column)
+  if(inherits(figures, c('numeric', 'integer'))){figures = obj$meta$column[figures]} 
+  else figures = figures %>% unique %>% as.character %>% verify('character', domain = obj$meta$column)
   
   nrw = chif(is.null(rows), obj$numrows, length(rows))
   ncl = length(figures)
   
   if(obj$cell_size*nrw*ncl > obj$size_limit) {
-    out = obj$copy()
-    out$meta %<>% filter(column %in% figures)
-    out$numcols   <- out$meta$column %>% unique %>% length
-    out$row_index <- chif(is.null(rows), obj$row_index, obj$row_index[rows])
-    out$data      <- obj$data[rows, obj$meta$column %^% names(obj$data)]
-    return(out)
+    return(extract.widetable(obj, rows, figures))
   }
   
   obj$meta %>% filter(column %in% figures) %>% pull(column) %>% unique -> columns
