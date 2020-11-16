@@ -281,7 +281,8 @@ extract.widetable = function(obj, rows, figures){
     out$row_index <- obj$row_index
     out$data      <- obj$data[, obj$meta$column %^% names(obj$data), drop = F]
   } else {
-    out$meta$n_unique = NA
+    # removing n_unique causes error 
+    # out$meta$n_unique = NA
     # removing memsize causes error in '[.WIDETABLE' method. 
     # out$meta$memsize  = NA
     out$row_index <- obj$row_index[rows]

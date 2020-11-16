@@ -9,6 +9,7 @@
 # 1.0.7 (05 November 2020)   - wt.R updated. Method as.matrix() and as.data.frame() changed.
 # 1.0.9 (05 November 2020)   - wt.R updated. Values of each column in meta table are updated for columns in data when a new copy is created 
 # 1.1.0 (11 November 2020)   - wt.R updated. Function extract.widetable() added 
+# 1.1.1 (12 November 2020)   - wt.R updated. minor issue fixed: n_unique does not become NA in row-subset widetables to avoid errors, but values are unreliable.
 # Description for Roxygen
 
 #' rbig
