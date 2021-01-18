@@ -769,6 +769,7 @@ parquet2calumns.old = function(path.parquet, path.columns, features){
 
 
 # SLOW
+#' @export
 parquet2csv = function(path.parquet, path.csv, columns = NULL){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
   tns = list.files(path.csv) %>% stringr::str_remove('.csv')
@@ -783,6 +784,7 @@ parquet2csv = function(path.parquet, path.csv, columns = NULL){
   }
 }
 
+#' @export
 parquet2RData = function(path.parquet, path.RData, columns = NULL){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
   tns = list.files(path.RData) %>% stringr::str_remove('.RData')
@@ -804,6 +806,8 @@ parquet2RData = function(path.parquet, path.RData, columns = NULL){
   }
 }
 
+
+#' @export
 parquet2DataFrame = function(path.parquet, columns = NULL, silent = T){
   ons = list.files(path.parquet) %-% '_SUCCESS'
   out = NULL
@@ -819,6 +823,7 @@ parquet2DataFrame = function(path.parquet, columns = NULL, silent = T){
   return(out)
 }
 
+#' @export
 RData2Columns = function(path.RData, path.columns, columns = NULL, buffer_size = 100){
   if(!file.exists(path.columns)) dir.create(path.columns)
 
@@ -848,6 +853,7 @@ RData2Columns = function(path.RData, path.columns, columns = NULL, buffer_size =
 }
 
 
+#' @export
 parquet2RDS = function(path.parquet, path.rds, columns = NULL){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
   tns = list.files(path.rds) %>% stringr::str_remove('.rds')
@@ -866,6 +872,7 @@ parquet2RDS = function(path.parquet, path.rds, columns = NULL){
 }
 
 
+#' @export
 RDS2Columns = function(path.rds, path.columns, columns = NULL, buffer_size = 100){
   if(!file.exists(path.columns)) dir.create(path.columns)
   ons = list.files(path.rds, full.names = T)
@@ -892,6 +899,7 @@ RDS2Columns = function(path.rds, path.columns, columns = NULL, buffer_size = 100
 }
 
 
+#' @export
 read_table_from_columns.RData = function(path.columns, columns = NULL, filter = NULL){
   ons = list.files(path.columns, full.names = F) %>% stringr::str_remove('.RData')
   if(is.null(columns)){
