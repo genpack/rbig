@@ -425,9 +425,9 @@ athena.buildTable = function(conn, dsName, tblName, column_types, id_columns, s3
 
 
 #' @export
-athena.buildConnection = function(bucket = "s3://aws-athena-query-results-xxxxxxxxxxxx-ap-southeast-2/", 
-                                  region = 'ap-southeast-2', profile = NULL, 
-                                  aws_config_path = NULL
+athena.buildConnection = function(bucket, 
+                                  region, profile = NULL, 
+                                  aws_config_path = NULL, ...
                                   ){
   pyathena = reticulate::import('pyathena')
   
@@ -437,7 +437,7 @@ athena.buildConnection = function(bucket = "s3://aws-athena-query-results-xxxxxx
     Sys.setenv(AWS_CONFIG_FILE = aws_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE = aws_shared_credentials_file)
   }
   
-  pyathena$connect(s3_staging_dir = bucket, region_name = region)
+  pyathena$connect(s3_staging_dir = bucket, region_name = region, profile = profile, ...)
 }
 
 #' @export

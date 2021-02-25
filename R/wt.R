@@ -110,6 +110,8 @@ WIDETABLE = setRefClass(
       }
     },
     
+    # update_meta = function(){},
+    
     load_column = function(cn){
       if(is.null(data[[cn]])){
         switch(format, 
@@ -251,7 +253,6 @@ setMethod("as.data.frame", "WIDETABLE", function(x) {
 
 #' @export
 setMethod("as.matrix", "WIDETABLE", function(x) {
-  
   # return(as.data.frame(x) %>% as.matrix)
   # Test if this is faster:
   x$load_columns(colnames(x)) %>% as.matrix  
@@ -263,8 +264,9 @@ setMethod("as.matrix", "WIDETABLE", function(x) {
   return(obj$load_column(figure))
 }
 
+# update_meta will update values in the meta table like n_unique and memsize by reading all columns specified in figures
 #' @export
-extract.widetable = function(obj, rows, figures){
+extract.widetable = function(obj, rows, figures, update_meta = F){
   out = obj$copy()
   # todo (important): some columns in the meta table (like n_uniue) depend on the row subset
   # fix this issue asap, 
@@ -279,7 +281,7 @@ extract.widetable = function(obj, rows, figures){
   out$numcols   <- out$meta$column %>% unique %>% length
   if(is.null(rows)){
     out$row_index <- obj$row_index
-    out$data      <- obj$data[, obj$meta$column %^% names(obj$data), drop = F]
+    out$data      <- obj$data[, out$meta$column %^% names(obj$data), drop = F]
   } else {
     # removing n_unique causes error 
     # out$meta$n_unique = NA
@@ -288,15 +290,28 @@ extract.widetable = function(obj, rows, figures){
     out$row_index <- obj$row_index[rows]
     out$data      <- obj$data[rows, obj$meta$column %^% names(obj$data), drop = F]
     data_columns  <- colnames(out$data)
+
+    rr = length(out$row_index)/out$numrows
+    
     for(i in sequence(nrow(out$meta))){
       if(out$meta$column[i] %in% data_columns){
         vec = out$data[[out$meta$column[i]]]
         out$meta$n_unique[i] <- length(unique(vec))
         out$meta$memsize[i]  <- object.size(vec) 
+      } else {
+        if(update_meta){
+          vec = out$load_columns(cn)[,1]
+          out$meta$n_unique[i] <- length(unique(vec))
+          out$meta$memsize[i]  <- object.size(vec) 
+        } else {
+          # estimates values
+          out$meta$n_unique[i] <- ceiling(out$meta$n_unique[i]*rr)
+          out$meta$memsize[i]  <- out$meta$memsize[i]*rr
+        }
       }
     }
+    out$numrows   <- length(out$row_index)
   }
-  
   return(out)
 }
 
@@ -315,15 +330,24 @@ extract.widetable = function(obj, rows, figures){
   if(inherits(figures, c('numeric', 'integer'))){figures = obj$meta$column[figures]} 
   else figures = figures %>% unique %>% as.character %>% verify('character', domain = obj$meta$column)
   
-  nrw = chif(is.null(rows), obj$numrows, length(rows))
+  objout = extract.widetable(obj, rows, figures)
+  
+  nrw = chif(is.null(rows), length(obj$row_index), length(obj$row_index[rows]))
   ncl = length(figures)
   
   if(obj$cell_size*nrw*ncl > obj$size_limit) {
-    return(extract.widetable(obj, rows, figures))
+    return(objout)
+  } else {
+    return(extract.dataframe(objout, drop = drop))
   }
-  
+}
+
+#' @export
+extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
+  if(is.null(figures)){figures = unique(obj$meta$column)}
   obj$meta %>% filter(column %in% figures) %>% pull(column) %>% unique -> columns
   
+  nrw = chif(is.null(rows), length(obj$row_index), length(obj$row_index[rows]))
   out = rep(0, nrw) %>% as.data.frame %>% {.[-1]}
   ####
   
@@ -356,9 +380,8 @@ extract.widetable = function(obj, rows, figures){
   obj$control_size()
   gc()
   if(drop & ncol(out) == 1){return(out[,1])} else {return(out)}
+  
 }
-
-
 
 ################ Extending dplyr functions to support WIDETABLE ######
 #' @export

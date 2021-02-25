@@ -11,6 +11,7 @@
 # 1.1.0 (11 November 2014)   - wt.R updated: Function extract.widetable() added 
 # 1.1.1 (12 November 2014)   - wt.R updated: minor issue fixed: n_unique does not become NA in row-subset widetables to avoid errors, but values are unreliable.
 # 1.1.2 (15 January 2015)    - io.R updated: parquet tools exported.
+# 1.1.7 (17 February 2015)   - wt.R updated: function extract.dataframe() added, '[.WIDETABLE' changed.
 # Description for Roxygen
 
 #' rbig
