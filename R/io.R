@@ -818,7 +818,11 @@ parquet2DataFrame = function(path.parquet, columns = NULL, silent = T){
       } else {
         tbl = arrow::read_parquet(path.parquet %>% paste(pfn, sep = '/'))
       }
-      out %<>% rbind(tbl)
+    if(is.null(out)){
+      out = tbl
+    } else {
+      out %<>% dplyr::bind_rows(tbl)
+    }
   }
   return(out)
 }
