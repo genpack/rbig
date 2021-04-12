@@ -13,6 +13,8 @@
 # 1.1.2 (15 January 2015)    - io.R updated: parquet tools exported.
 # 1.1.7 (17 February 2015)   - wt.R updated: function extract.dataframe() added, '[.WIDETABLE' changed.
 # 1.1.8 (05 March 2015)      - io.R updated: function parquet2DataFrame() edited. rbind issue resolved.
+# 1.2.1 (25 March 2015)      - wt.R updated: function cor.widetable() added and exported.
+# 1.2.5 (12 April 2015)      - wt.R updated: function cor.widetable.parallel() added plus cor.widetable() modified: prints progress info
 # Description for Roxygen
 
 #' rbig

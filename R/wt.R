@@ -20,7 +20,7 @@ WIDETABLE = setRefClass(
       if(is.empty(size_limit)){size_limit <<- 10^9}
       if(is.empty(cell_size)){cell_size <<- 0}
       if(is.empty(format)){format <<- 'RData'}
-      format <<- format %>% verify('character', domain = c('RData', 'rds'), lengths = 1, default = 'rds')
+      format <<- verify(format, 'character', domain = c('RData', 'rds'), lengths = 1, default = 'rds')
       if(is.empty(numcols)){numcols <<- 0L}
       if(is.empty(numrows)){numrows <<- 0L}
       row_index <<- sequence(numrows)
@@ -260,7 +260,7 @@ setMethod("as.matrix", "WIDETABLE", function(x) {
 
 #' @export
 '[[.WIDETABLE' = function(obj, figure = NULL){
-  figure %>% verify('character', domain = colnames(obj), lengths = 1)
+  verify(figure, 'character', domain = colnames(obj), lengths = 1)
   return(obj$load_column(figure))
 }
 
@@ -277,7 +277,7 @@ extract.widetable = function(obj, rows, figures, update_meta = F){
   #    so that everytime the column is read, meta becomes updated!
   # 4- add, sum, mean, max, min, sd, var and some moments to the meta
   # 5- similar values for rows (a meta table for rows is required!)
-  out$meta %<>% filter(column %in% figures)
+  out$meta <- out$meta[out$meta$column %in% figures, ] 
   out$numcols   <- out$meta$column %>% unique %>% length
   if(is.null(rows)){
     out$row_index <- obj$row_index
@@ -328,7 +328,7 @@ extract.widetable = function(obj, rows, figures, update_meta = F){
     }
   }
   if(inherits(figures, c('numeric', 'integer'))){figures = obj$meta$column[figures]} 
-  else figures = figures %>% unique %>% as.character %>% verify('character', domain = obj$meta$column)
+  else figures = verify(figures %>% unique %>% as.character, 'character', domain = obj$meta$column)
   
   objout = extract.widetable(obj, rows, figures)
   
@@ -345,7 +345,7 @@ extract.widetable = function(obj, rows, figures, update_meta = F){
 #' @export
 extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
   if(is.null(figures)){figures = unique(obj$meta$column)}
-  obj$meta %>% filter(column %in% figures) %>% pull(column) %>% unique -> columns
+  obj$meta$column %>% intersect(figures) -> columns
   
   nrw = chif(is.null(rows), length(obj$row_index), length(obj$row_index[rows]))
   out = rep(0, nrw) %>% as.data.frame %>% {.[-1]}
@@ -354,10 +354,11 @@ extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
   added_cols    = columns %-% names(obj$data)
   existing_cols = names(obj$data) %^% columns
   free_memory   = obj$size_limit - object.size(obj$data[existing_cols])
-  
-  obj$meta %>% filter(column %in% added_cols) %>% arrange(memsize) %>% 
-    mutate(cumems = cumsum(memsize)) %>% 
-    filter(cumems < free_memory) %>% pull(column) -> allowed
+
+  obj$meta[obj$meta$column %in% added_cols, ] %>% 
+    dplyr::arrange(memsize) %>% 
+    dplyr::mutate(cumems = cumsum(memsize)) %>% 
+    dplyr::filter(cumems < free_memory) %>% pull(column) -> allowed
   
   obj$data[allowed] <- obj$load_columns(allowed)
   
@@ -383,6 +384,86 @@ extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
   
 }
 
+# Computes cross-correlation for widetables using multi-core
+#' @export
+cor.widetable.parallel = function(wt, n_jobs = 4){
+  # todo
+  # Determine number of partitions:
+  columns = colnames(wt)
+  ncolwt  = length(columns)
+  np_set  = ncolwt %>% rutils::divisors()
+  is_df   = inherits(wt[columns], 'data.frame')
+  i = 1
+  while(!is_df){
+    i = i + 1
+    is_df   = inherits(wt[columns[sequence(ncolwt/np_set[i])]], 'data.frame')
+  }
+  # Run:
+  library(doParallel)
+  
+  nn  = np_set[i]
+  mm  = ncolwt/nn
+  out = matrix(nrow = ncolwt, ncol = ncolwt, dimnames = list(columns, columns))
+  
+  for(i in sequence(nn)){
+    X  = wt[columns[(i - 1)*mm + sequence(mm)]]
+    cl = makeCluster(n_jobs)
+    registerDoParallel(cl)
+    warnif(getDoParWorkers() < n_jobs, 'Parallel run is not working. It may take too long!')
+    jl = foreach(j = 1:nn, .combine = list, .multicombine = TRUE, .packages = c('magrittr', 'stats', 'dplyr', 'rutils', 'rbig'), .errorhandling = 'pass') %dopar% {
+      if(j == i){
+        v = cor(X)
+      } else {
+        Y = wt[columns[(j - 1)*mm + sequence(mm)]]
+        v = cor(X, Y)
+      }
+      gc()
+      list(v)
+    }
+    cat('\n', sprintf("Partition row %s Finished. Total grid size: %s x %s. Num columns in each partition: %s", i, nn, nn, mm))
+    for(v in jl){
+      out[rownames(v), colnames(v)] <- v
+      out[colnames(v), rownames(v)] <- v
+    }
+    stopCluster(cl)
+  }
+  return(out)
+}
+
+# Computes cross-correlation for widetables
+#' @export
+cor.widetable = function(wt){
+  # Determine number of partitions:
+  columns = colnames(wt)
+  ncolwt  = length(columns)
+  np_set  = ncolwt %>% rutils::divisors()
+  is_df   = inherits(wt[columns], 'data.frame')
+  i = 1
+  while(!is_df){
+    i = i + 1
+    is_df   = inherits(wt[columns[sequence(ncolwt/np_set[i])]], 'data.frame')
+  }
+  # Run:
+  nn  = np_set[i]
+  mm  = ncolwt/nn
+  out = matrix(nrow = ncolwt, ncol = ncolwt, dimnames = list(columns, columns))
+  
+  for(i in sequence(nn)){
+    X = wt[columns[(i - 1)*mm + sequence(mm)]]
+    for(j in sequence(nn)){
+      if(j == i){
+        v = cor(X)
+      } else {
+        Y = wt[columns[(j - 1)*mm + sequence(mm)]]
+        v = cor(X, Y)
+      }
+      out[rownames(v), colnames(v)] <- v
+      cat('\n', sprintf("Partition row %s, column %s Finished. Total grid size: %s x %s. Num columns in each partition: %s", i, j, nn, nn, mm))
+    }
+  }
+  return(out)
+}
+  
 ################ Extending dplyr functions to support WIDETABLE ######
 #' @export
 select = function(x, ...){
