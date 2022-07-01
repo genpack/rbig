@@ -259,11 +259,10 @@ sqlScript = function(tableName, fields = NULL, dbName = 'UDRBSCMS', filter = NUL
 }
 
 
-#' @export
-readODBC <- function(tableName, fields = NULL, dbName = 'UDRBSCMS', filter = NULL, dsn = 'Teradata_Prod', vf = T){
+readODBC <- function(tableName, fields = NULL, filter = NULL, dbName, dsn, vf = T, ...){
   # Verifications:
   if(vf){assert(require(RODBC), "Package 'RODBC' is not installed!", err_src = match.call()[[1]])}
-  
+  # todo: check arguments passed to odbcConnect
   channel    = odbcConnect(dsn = dsn, ...)
   D          = sqlQuery(channel = channel, query = sqlScript(tableName = tableName, fields = fields, dbName = dbName, filter = filter, vf = vf), ...)
   close(channel)
@@ -299,11 +298,13 @@ spark.read_s3 = function(path){
 }
 
 
-# bins numeric columns to categorical 
-# binners is a list containing:
-# input_col = colname to be binned, must have numeric values
-# output_col = colname to be generated as a result of binning
-# splits = named numeric vector containing splits and labels for them
+#' @title Column Binner for Spark
+#' @description Bins numeric columns of a given table and creates a new column containing categorical bins
+#' @param df (dataframe, tibble, tbl_spark) table to be binned
+#' @param binners (list) list containing:
+#' \code{input_col (character)}: colname to be binned, must have numeric values
+#' \code{output_col (character)}: column name to be generated as a result of binning
+#' \code{ splits (named numeric)}: named numeric vector containing splits and labels for them
 #' @export
 spark.bin = function(df, binners){
   if(inherits(df, c('data.frame', 'tibble'))){

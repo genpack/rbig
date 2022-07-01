@@ -4,6 +4,7 @@
 # -----------------------------------
 # 1.0.4     13 October 2020    Initial Issue
 # 1.0.5     13 October 2020    generic methods exported
+# 1.0.7     07 June 2021       Minor bug in extract.dataframe() fixed: changed order of columns in the output before fix
 
 ################## WIDE TABLES: ##################
 #' @export WIDETABLE
@@ -112,6 +113,21 @@ WIDETABLE = setRefClass(
     
     # update_meta = function(){},
     
+    updated_copy = function(){
+      cp = new('WIDETABLE')
+      cp$name <- name
+      cp$meta <- meta
+      cp$row_index <- row_index
+      cp$cell_size <- cell_size
+      cp$data <- data
+      cp$format <- format
+      cp$numcols <- numcols
+      cp$path <- path
+      cp$size_limit <- size_limit
+      
+      return(cp)
+    },
+    
     load_column = function(cn){
       if(is.null(data[[cn]])){
         switch(format, 
@@ -140,6 +156,32 @@ WIDETABLE = setRefClass(
       }
       return(out)
     },  
+    
+    # This function, replaces selected rows and columns with a certain value
+    # equivalent to: x[rows, cols] <- value
+    # if argument save is TRUE, this functions changes the values and automatically saves the changes.
+    # So changes will remain in the table.(Values are changed next time you load the widetable)
+    set_value = function(rows = NULL, cols = NULL, value, save = T){
+      if(is.null(rows)){rows = sequence(length(row_index))}
+      if(is.null(cols)){cols = meta$column}
+      
+      if(inherits(cols, 'numeric')) cols = as.integer(cols)
+      if(inherits(cols, 'integer')) cols = meta$column[cols]
+      
+      for(cn in cols){
+        v = load_column(cn)
+        v[rows] <- value
+        icn = which(meta$column == cn)
+        meta$n_unique[icn] <<- unique(v) %>% length
+        meta$memsize[icn]  <<- object.size(v)
+        data[, cn] <<- v
+        if(save){
+          save_column(cn)
+        }
+        control_size()
+        gc()
+      }
+    },
     
     control_size = function(){
       while(object.size(data) > size_limit){
@@ -277,7 +319,8 @@ extract.widetable = function(obj, rows, figures, update_meta = F){
   #    so that everytime the column is read, meta becomes updated!
   # 4- add, sum, mean, max, min, sd, var and some moments to the meta
   # 5- similar values for rows (a meta table for rows is required!)
-  out$meta <- out$meta[out$meta$column %in% figures, ] 
+  out$meta      <- data.frame(column = figures, stringsAsFactors = F) %>% 
+    dplyr::left_join(obj$meta, by = 'column') %>% na.omit
   out$numcols   <- out$meta$column %>% unique %>% length
   if(is.null(rows)){
     out$row_index <- obj$row_index
@@ -380,13 +423,13 @@ extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
   
   obj$control_size()
   gc()
-  if(drop & ncol(out) == 1){return(out[,1])} else {return(out)}
+  if(drop & ncol(out) == 1){return(out[figures ,1])} else {return(out[figures])}
   
 }
 
 # Computes cross-correlation for widetables using multi-core
 #' @export
-cor.widetable.parallel = function(wt, n_jobs = 4){
+cor.widetable.multicore = function(wt, n_jobs = 4){
   # todo
   # Determine number of partitions:
   columns = colnames(wt)
@@ -410,7 +453,7 @@ cor.widetable.parallel = function(wt, n_jobs = 4){
     cl = makeCluster(n_jobs)
     registerDoParallel(cl)
     warnif(getDoParWorkers() < n_jobs, 'Parallel run is not working. It may take too long!')
-    jl = foreach(j = 1:nn, .combine = list, .multicombine = TRUE, .packages = c('magrittr', 'stats', 'dplyr', 'rutils', 'rbig'), .errorhandling = 'pass') %dopar% {
+    jl = foreach(j = i:nn, .combine = c, .packages = c('magrittr', 'stats', 'dplyr', 'rutils', 'rbig'), .errorhandling = 'pass') %dopar% {
       if(j == i){
         v = cor(X)
       } else {
@@ -423,7 +466,7 @@ cor.widetable.parallel = function(wt, n_jobs = 4){
     cat('\n', sprintf("Partition row %s Finished. Total grid size: %s x %s. Num columns in each partition: %s", i, nn, nn, mm))
     for(v in jl){
       out[rownames(v), colnames(v)] <- v
-      out[colnames(v), rownames(v)] <- v
+      out[colnames(v), rownames(v)] <- t(v)
     }
     stopCluster(cl)
   }
@@ -450,7 +493,7 @@ cor.widetable = function(wt){
   
   for(i in sequence(nn)){
     X = wt[columns[(i - 1)*mm + sequence(mm)]]
-    for(j in sequence(nn)){
+    for(j in i:nn){
       if(j == i){
         v = cor(X)
       } else {
@@ -458,12 +501,26 @@ cor.widetable = function(wt){
         v = cor(X, Y)
       }
       out[rownames(v), colnames(v)] <- v
+      out[colnames(v), rownames(v)] <- t(v)
       cat('\n', sprintf("Partition row %s, column %s Finished. Total grid size: %s x %s. Num columns in each partition: %s", i, j, nn, nn, mm))
     }
   }
   return(out)
 }
-  
+
+
+#' @export
+'[<-.WIDETABLE' = function(obj, value, ...){
+  obj$set_value(value = value, ...)
+  return(obj)
+}
+
+#' @export
+'[[<-.WIDETABLE' = function(obj, value, ...){
+  obj$set_value(value = value, rows = NULL, ...)
+  return(obj)
+}
+
 ################ Extending dplyr functions to support WIDETABLE ######
 #' @export
 select = function(x, ...){
@@ -513,5 +570,3 @@ cbind = function(x, ...){
 #'     return(out)
 #'   } else {return(base::data.matrix(x))}  
 #' }
-
-
