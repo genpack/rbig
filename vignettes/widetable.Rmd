@@ -1,0 +1,395 @@
+---
+title: "Working with WIDETABLE"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Working with WIDETABLE}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+set.seed(42)
+```
+
+```{r setup}
+library(rwidetable)
+```
+
+## What is a WIDETABLE?
+
+A `data.frame` lives entirely in memory, so a table with tens of thousands of
+columns (for example one feature per variable and time window) quickly becomes too
+big to handle. A `WIDETABLE` keeps such a table **on disk, one file per column**:
+
+```
+<path>/<name>/
+    .meta.rds        # column names, classes, sizes and the number of rows
+    age.rds          # one file per column
+    income.rds
+    ...
+```
+
+Only the columns you use are read, and a size-limited in-memory cache keeps the
+most recently used ones. The number of columns is therefore limited only by the
+disk space, while the object still behaves very much like a `data.frame`:
+`wt[rows, cols]`, `wt[[col]]`, `nrow()`, `ncol()`, `head()`, `rbind()`, `cbind()`,
+`as.data.frame()` and the `dplyr` verbs `select()` and `pull()` all work.
+
+`WIDETABLE` is a *reference class*: an object is a handle to the table on disk.
+Every change (new columns, new rows, new values) is written to the files
+immediately; there is no separate save step, and copies of the handle see the same
+files.
+
+In this vignette all tables are created in a temporary folder:
+
+```{r}
+home = file.path(tempdir(), 'widetables')
+dir.create(home, showWarnings = FALSE)
+```
+
+## 1. Building a WIDETABLE and feeding data into it
+
+### From a data.frame in one step
+
+`as.WIDETABLE()` creates the table folder and writes every column:
+
+```{r}
+cars = as.WIDETABLE(mtcars, name = 'cars', path = home)
+cars
+```
+
+The folder now contains one file per column plus the metadata file:
+
+```{r}
+list.files(file.path(home, 'cars'), all.files = TRUE, no.. = TRUE)
+```
+
+### Column by column
+
+Create an empty table with `WIDETABLE()` and add vectors with the `add_column()`
+method, data.frames with `add_table()`, or simply assign new columns with `[[<-`.
+The first column defines the number of rows; every later column must have the same
+length.
+
+```{r}
+people = WIDETABLE(name = 'people', path = home)
+people$add_column(1:8, 'id')
+people$add_table(data.frame(age    = c(23, 35, 41, 52, 29, 61, 33, 47),
+                            gender = factor(c('F', 'M', 'F', 'F', 'M', 'M', 'F', 'M'))))
+people[['joined']] <- as.Date('2020-01-01') + c(10, 400, 35, 900, 120, 2, 760, 55)
+dim(people)
+head(people, 3)
+```
+
+Column names must be valid file names: characters such as `/ \ : * ? " < > |` are
+rejected, and so are names that differ from an existing column only by case (they
+would collide on Windows and macOS).
+
+### A really wide table
+
+Nothing changes when the table has thousands of columns. Here we add 2,000 feature
+columns, one at a time, without ever holding them all in memory:
+
+```{r}
+features = WIDETABLE(name = 'features', path = home, size_limit = 2e6)
+features$add_column(1:500, 'id')
+for (k in 1:2000) {
+  features$add_column(rnorm(500), sprintf('f%04d', k), save_meta = FALSE)
+}
+features$write_meta()     # write the metadata once at the end
+dim(features)
+```
+
+`save_meta = FALSE` skips rewriting the metadata file after every column, which
+makes adding thousands of columns faster; `write_meta()` saves it at the end
+(`add_table()` does this automatically).
+
+`size_limit` (in bytes, default 1 GB) bounds the memory used by the cache. It is
+also the threshold that decides what subsetting returns (see section 4).
+
+### Opening an existing table
+
+A table is opened again by name and path. Only the small metadata file is read, so
+opening is instant whatever the size of the table:
+
+```{r}
+features2 = WIDETABLE(name = 'features', path = home)
+dim(features2)
+ncol(features2$data)   # no column is in memory yet
+```
+
+Folders written by older versions of the package (without `.meta.rds`) are scanned
+once when opened, and the metadata file is created.
+
+### From files on disk
+
+* `parquet2WIDETABLE()` converts a folder of parquet files (for example a table
+  written by Spark) into a `WIDETABLE` without loading the whole table: columns are
+  processed in batches of `buffer_size`. It requires the `arrow` package.
+* `RDS2Columns()` and `RData2Columns()` do the same for a folder of row chunks saved
+  as `.rds` or `.RData` files.
+
+```{r}
+chunks = file.path(home, 'chunks')
+dir.create(chunks)
+saveRDS(iris[1:50, ],   file.path(chunks, 'part1.rds'))
+saveRDS(iris[51:100, ], file.path(chunks, 'part2.rds'))
+saveRDS(iris[101:150, ], file.path(chunks, 'part3.rds'))
+
+RDS2Columns(chunks, file.path(home, 'iris'))
+flowers = WIDETABLE(name = 'iris', path = home)
+dim(flowers)
+```
+
+```{r, eval = FALSE}
+# A Spark output folder with part-*.snappy.parquet files:
+wt = parquet2WIDETABLE('data/features.parquet', name = 'features', path = 'tables',
+                       buffer_size = 200)
+```
+
+## 2. Converting between data.frames and WIDETABLEs
+
+| From | To | How |
+|------|----|-----|
+| `data.frame`, tibble, matrix | `WIDETABLE` | `as.WIDETABLE(df, name, path)` |
+| `data.frame` | existing `WIDETABLE` (new columns) | `wt$add_table(df)` or `cbind(wt, df)` |
+| `data.frame` | existing `WIDETABLE` (new rows) | `rbind(wt, df)` |
+| `WIDETABLE` | `data.frame` | `as.data.frame(wt)`, `wt[rows, cols]` |
+| `WIDETABLE` | `matrix` | `as.matrix(wt)` |
+
+```{r}
+df = as.data.frame(people)
+str(df)
+all.equal(as.data.frame(cars), mtcars, check.attributes = FALSE)
+```
+
+`as.WIDETABLE()` refuses to overwrite an existing table unless you ask for it:
+
+```{r, error = TRUE}
+as.WIDETABLE(mtcars, name = 'cars', path = home)
+```
+
+```{r}
+cars = as.WIDETABLE(mtcars, name = 'cars', path = home, overwrite = TRUE)
+```
+
+`as.data.frame()` and `as.matrix()` load *all* columns: use them only when the
+result fits in memory. Otherwise work on a subset (section 4).
+
+## 3. Binding data frames incrementally
+
+Data often arrive in batches: one file per day, one query result per month, one
+chunk per worker. `rbind()` appends rows to a `WIDETABLE` in place, so the full
+table never has to be in memory. Columns are matched by name (their order does not
+matter), and factor levels are merged.
+
+```{r}
+monthly = function(month) {
+  data.frame(month  = month,
+             store  = sample(c('north', 'south', 'east'), 4, replace = TRUE),
+             sales  = round(runif(4, 100, 500)),
+             online = sample(c(TRUE, FALSE), 4, replace = TRUE))
+}
+
+sales = WIDETABLE(name = 'sales', path = home)   # empty table
+for (m in month.abb[1:3]) {
+  rbind(sales, monthly(m))                        # appended and saved
+}
+dim(sales)
+table(sales[['month']])
+```
+
+Several tables can be bound in one call, and another `WIDETABLE` can be bound too:
+
+```{r}
+rbind(sales, monthly('Apr'), monthly('May'))
+q3 = as.WIDETABLE(rbind(monthly('Jul'), monthly('Aug')), name = 'q3', path = home)
+rbind(sales, q3)
+nrow(sales)
+```
+
+By default the column sets must be identical. With `fill = TRUE`, missing values
+are filled with `NA` and new columns are added (with `NA` for the earlier rows):
+
+```{r, error = TRUE}
+june = transform(monthly('Jun'), returns = c(2, 0, 1, 3))
+rbind(sales, june)
+```
+
+```{r}
+rbind(sales, june, fill = TRUE)
+tail(sales, 6)
+```
+
+The equivalent method is `sales$rbind_table(df, fill = TRUE)`.
+
+Columns can be bound in the same way with `cbind()` (or `add_table()`); the new
+columns must have one value per row:
+
+```{r}
+cbind(sales, data.frame(row_id = seq_len(nrow(sales))))
+colnames(sales)
+```
+
+To add columns by key rather than by position, use a left join. Row count and
+order are preserved, unmatched rows get `NA`, and the key must be unique in the
+joined table:
+
+```{r}
+targets = data.frame(store = c('north', 'south', 'east'), target = c(300, 250, 400))
+sales$leftjoin_dataframe(targets, by = 'store')
+head(sales[c('store', 'sales', 'target')])
+```
+
+## 4. Working with a WIDETABLE like a data.frame
+
+### Dimensions and names
+
+```{r}
+dim(cars); nrow(cars); ncol(cars)
+colnames(cars)
+```
+
+### Subsetting
+
+`[` follows the `data.frame` rules: `wt[i, j]` selects rows and columns (by
+position, negative position, logical vector or, for columns, by name), `wt[j]`
+selects columns, and `drop = TRUE` (the default) turns a single selected column into
+a vector.
+
+```{r}
+cars[1:3, c('mpg', 'cyl', 'hp')]
+cars[c('mpg', 'wt')] |> head(3)
+cars[cars[['cyl']] == 6, 'mpg']
+cars[-(1:28), 1:3]
+cars[1:2, 'mpg', drop = FALSE]
+```
+
+`[[` extracts one column as a vector:
+
+```{r}
+summary(cars[['hp']])
+```
+
+The result of `[` is a `data.frame` when its estimated size fits in
+`size_limit`. When it does not, `[` returns a **new WIDETABLE** that refers to the
+selected rows and columns of the same files. Nothing is read from disk until you use
+it, and it can be subset further:
+
+```{r}
+small_cache = WIDETABLE(name = 'features', path = home, size_limit = 1e5)
+block = small_cache[1:100, sprintf('f%04d', 1:1000)]
+class(block)
+dim(block)
+block[1:3, 1:4]
+```
+
+`extract.widetable()` always returns a `WIDETABLE` and `extract.dataframe()` always
+returns a `data.frame`, whatever the size.
+
+### head, tail and dplyr
+
+```{r}
+head(cars, 3)
+tail(cars, 2)
+```
+
+`dplyr::select()` accepts all tidyselect helpers, and `dplyr::pull()` extracts a
+column:
+
+```{r}
+library(dplyr, warn.conflicts = FALSE)
+flowers |> select(starts_with('Petal')) |> head(3)
+flowers |> select(where(is.factor)) |> nrow()
+flowers |> pull(Species) |> table()
+```
+
+### Changing values and columns
+
+Assignment works as for a `data.frame`, and changes are saved right away:
+
+```{r}
+cars[1:2, 'mpg'] <- 0                          # replace values
+cars[['kpl']]    <- cars[['mpg']] * 0.425      # new column
+cars[cars[['hp']] > 200, 'fast'] <- TRUE       # new column, NA elsewhere
+cars[1:3, c('mpg', 'kpl', 'fast')]
+cars[['fast']] <- NULL                         # delete a column
+cars$rename_column('kpl', 'km_per_litre')
+colnames(cars)
+```
+
+Assignments to a row subset change only those rows of the files:
+
+```{r}
+first10 = extract.widetable(cars, rows = 1:10)
+first10[1, 'hp'] <- 999
+cars[1:2, 'hp']                                    # the parent sees the change
+WIDETABLE(name = 'cars', path = home)[1:2, 'hp']   # and so does the file
+```
+
+### Statistics on many columns
+
+Any function can be applied column by column with `wt[[col]]`, so only one column
+is in memory at a time:
+
+```{r}
+means = vapply(colnames(features)[-1], function(cn) mean(features[[cn]]), numeric(1))
+head(means)
+```
+
+`cor.widetable()` computes the correlation matrix of all numeric columns block by
+block, keeping only two blocks in memory; `cor.widetable.multicore()` computes the
+blocks in parallel:
+
+```{r}
+cm = cor.widetable(cars)
+round(cm[1:4, 1:4], 2)
+```
+
+### Memory management
+
+The cache holds the most recently used columns up to `size_limit` bytes. You can
+inspect it, change the limit or empty it:
+
+```{r}
+names(features$data) |> length()
+features$size_limit = 5e5
+features$control_size()     # applies the new limit
+features$clear()            # empties the cache
+```
+
+## 5. Reference semantics: things to keep in mind
+
+* `wt2 = wt` does **not** copy the table: both names point to the same object and
+  files. To keep a separate version, copy the folder (or build a new table).
+* Modifying methods (`add_column()`, `rbind()`, `[<-`, ...) write to disk
+  immediately.
+* A subset `WIDETABLE` (from `[` or `extract.widetable()`) shares the files of its
+  parent. Changing values through it changes the parent table, and the caches of
+  the parent, its copies and its subsets are refreshed automatically. Adding rows or
+  columns must be done on the full table.
+* A handle opened separately with `WIDETABLE(name, path)` does not see later
+  changes made through another handle: call `wt$refresh()` to re-read the metadata
+  and empty the cache.
+* To delete a table, delete its folder: `unlink(file.path(path, name), recursive = TRUE)`.
+
+```{r, include = FALSE}
+unlink(home, recursive = TRUE)
+```
+
+## Method reference
+
+| Method | Purpose |
+|--------|---------|
+| `WIDETABLE(name, path, size_limit, format)` | create or open a table |
+| `as.WIDETABLE(df, name, path)` | convert a data.frame |
+| `$add_column(vec, name)`, `$add_table(df)`, `cbind()` | add columns |
+| `rbind(wt, df, fill)`, `$rbind_table(df, fill)` | add rows |
+| `$leftjoin_dataframe(df, by)` | add columns by key |
+| `wt[i, j]`, `wt[j]`, `wt[[j]]`, `head()`, `tail()` | read |
+| `wt[i, j] <- v`, `wt[[j]] <- v` | write |
+| `$remove_column(cn)`, `wt[[j]] <- NULL`, `$rename_column(old, new)` | manage columns |
+| `$load_column(cn)`, `$load_columns(cols)` | load columns |
+| `$clear()`, `$control_size()`, `$refresh()` | cache and metadata |
+| `cor.widetable()`, `cor.widetable.multicore()` | correlation matrix |

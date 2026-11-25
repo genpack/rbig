@@ -1,7 +1,7 @@
 Package: rwidetable
 Type: Package
 Title: Disk-Backed Wide Tables with (Virtually) Unlimited Columns
-Version: 1.4.0
+Version: 1.4.1
 Date: 2026-11-26
 Authors@R: person("Nicolas", "Berta", email = "nicolas.berta@gmail.com", role = c("aut", "cre"))
 Description: Provides WIDETABLE, a reference class that stores each column of a
@@ -28,6 +28,7 @@ Suggests:
     withr,
     knitr,
     rmarkdown
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 Collate: 
     'utils.R'

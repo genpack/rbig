@@ -10,9 +10,12 @@ The package provides \code{\link{WIDETABLE}}, a reference class that stores each
 column of a table in its own file, so the number of columns is limited only by the
 storage space, while the object can be used much like a \code{data.frame}.
 It also includes tools that turn parquet files and row chunks into per-column files
-(\code{\link{parquet2RDS}}, \code{\link{RDS2Columns}}, ...).
+(\code{\link{parquet2WIDETABLE}}, \code{\link{RDS2Columns}},
+\code{\link{RData2Columns}}).
 }
 \details{
+Start with the vignette: \code{vignette('widetable', package = 'rwidetable')}.
+
 This package was formerly named \pkg{rbig}.
 }
 \author{
