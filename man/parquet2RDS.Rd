@@ -14,9 +14,11 @@ parquet2RDS(path.parquet, path.rds, columns = NULL)
 \item{columns}{(character) optional subset of columns to keep.}
 }
 \value{
-Called for its side effect (files written).
+Paths of the files written (invisibly).
 }
 \description{
-Each \code{*.snappy.parquet} file is read with \pkg{arrow} and saved as an
-\code{.rds} file with the same base name. Files already converted are skipped.
+Each \code{*.parquet} file is read with \pkg{arrow} and saved as an \code{.rds}
+file with the same base name in \code{path.rds}. Files already converted are skipped.
+The output can be split into column files with \code{\link{RDS2Columns}}.
 }
+\keyword{internal}

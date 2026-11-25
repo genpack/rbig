@@ -4,7 +4,7 @@
 \alias{parquet2DataFrame}
 \title{Read a folder of parquet files into one data.frame}
 \usage{
-parquet2DataFrame(path.parquet, columns = NULL, silent = T)
+parquet2DataFrame(path.parquet, columns = NULL, silent = TRUE)
 }
 \arguments{
 \item{path.parquet}{(character) folder containing the parquet files.}
@@ -14,11 +14,14 @@ parquet2DataFrame(path.parquet, columns = NULL, silent = T)
 \item{silent}{(logical) if \code{FALSE}, prints the name of each file read.}
 }
 \value{
-A tibble / \code{data.frame}.
+A \code{data.frame}.
 }
 \description{
-Reads every file in \code{path.parquet} (except \code{_SUCCESS}) with \pkg{arrow}
-and binds the rows. This is the usual layout written by Spark.
+Reads every \code{*.parquet} file in \code{path.parquet} (the layout written by Spark)
+with \pkg{arrow} and binds the rows in file-name order. Use it to load a table that
+fits in memory, for example to feed it to \code{\link{as.WIDETABLE}} or
+\code{rbind(wt, df)}. For tables that do not fit in memory use
+\code{\link{parquet2WIDETABLE}}.
 }
 \examples{
 \dontrun{

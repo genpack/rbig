@@ -4,12 +4,14 @@
 \alias{[[.WIDETABLE}
 \title{Extract one column of a WIDETABLE}
 \usage{
-\method{[[}{WIDETABLE}(obj, figure = NULL)
+\method{[[}{WIDETABLE}(x, i, ...)
 }
 \arguments{
-\item{obj}{a \code{WIDETABLE}.}
+\item{x}{a \code{WIDETABLE}.}
 
-\item{figure}{(character) name of the column.}
+\item{i}{(character or integer) name or position of the column.}
+
+\item{...}{ignored.}
 }
 \value{
 The column as a vector (rows of the current row subset).
@@ -18,7 +20,8 @@ The column as a vector (rows of the current row subset).
 Extract one column of a WIDETABLE
 }
 \examples{
-\dontrun{
+folder = tempfile(); dir.create(folder)
+wt = as.WIDETABLE(mtcars, name = 'cars', path = folder)
 wt[['mpg']]
-}
+unlink(folder, recursive = TRUE)
 }

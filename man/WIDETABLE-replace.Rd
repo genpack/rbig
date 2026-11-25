@@ -6,21 +6,35 @@
 \alias{[[<-.WIDETABLE}
 \title{Replace values in a WIDETABLE}
 \usage{
-\method{[}{WIDETABLE}(obj, ...) <- value
+\method{[}{WIDETABLE}(x, i, j) <- value
 
-\method{[[}{WIDETABLE}(obj, ...) <- value
+\method{[[}{WIDETABLE}(x, i) <- value
 }
 \arguments{
-\item{obj}{a \code{WIDETABLE}.}
+\item{x}{a \code{WIDETABLE}.}
 
-\item{value}{replacement value(s).}
+\item{i}{rows (positions or logical); in the forms \code{wt[j] <- v} and
+\code{wt[[j]] <- v}, the column(s).}
 
-\item{...}{\code{rows} and \code{cols}, passed to \code{set_value}.}
+\item{j}{columns (names, positions or logical).}
+
+\item{value}{replacement value(s): a vector (recycled if of length one) or, for several
+columns, a \code{data.frame} or list with one element per column.}
 }
 \value{
-The modified \code{WIDETABLE}.
+The modified \code{WIDETABLE} (the same object).
 }
 \description{
-\code{wt[rows, cols] <- value} and \code{wt[[col]] <- value} change values and save
-the affected column files (see the \code{set_value} method of \code{\link{WIDETABLE}}).
+\code{wt[i, j] <- value}, \code{wt[j] <- value} and \code{wt[[j]] <- value} change
+values and write the affected column files immediately (see the \code{set_value}
+method of \code{\link{WIDETABLE}}). Assigning to a column name that does not exist
+creates a new column. \code{wt[[j]] <- NULL} deletes column \code{j}.
+}
+\examples{
+folder = tempfile(); dir.create(folder)
+wt = as.WIDETABLE(mtcars, name = 'cars', path = folder)
+wt[1:2, 'mpg'] <- 0
+wt[['kpl']] <- wt[['mpg']] * 0.425   # new column
+wt[['kpl']] <- NULL                  # delete it
+unlink(folder, recursive = TRUE)
 }

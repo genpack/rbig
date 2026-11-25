@@ -2,23 +2,17 @@
 % Please edit documentation in R/wt.R
 \name{WIDETABLE-dims}
 \alias{WIDETABLE-dims}
-\alias{names,WIDETABLE-method}
-\alias{colnames,WIDETABLE-method}
-\alias{nrow,WIDETABLE-method}
-\alias{ncol,WIDETABLE-method}
 \alias{dim,WIDETABLE-method}
+\alias{dimnames,WIDETABLE-method}
+\alias{names,WIDETABLE-method}
 \alias{length,WIDETABLE-method}
 \title{Dimensions and column names of a WIDETABLE}
 \usage{
-\S4method{names}{WIDETABLE}(x)
-
-\S4method{colnames}{WIDETABLE}(x)
-
-\S4method{nrow}{WIDETABLE}(x)
-
-\S4method{ncol}{WIDETABLE}(x)
-
 \S4method{dim}{WIDETABLE}(x)
+
+\S4method{dimnames}{WIDETABLE}(x)
+
+\S4method{names}{WIDETABLE}(x)
 
 \S4method{length}{WIDETABLE}(x)
 }
@@ -26,18 +20,19 @@
 \item{x}{a \code{WIDETABLE}.}
 }
 \value{
-\code{names}/\code{colnames}: character; \code{nrow}, \code{ncol},
-  \code{length}: integer; \code{dim}: integer vector of length 2.
+\code{dim}: integer vector of length 2; \code{dimnames}: list of
+  \code{NULL} (no row names) and the column names; \code{names}: character;
+  \code{length}: integer.
 }
 \description{
-S4 methods that make a \code{WIDETABLE} behave like a \code{data.frame}.
-\code{names} and \code{colnames} return the column names, \code{nrow} the number
-of rows (of the current row subset), \code{ncol} and \code{length} the number of
-columns and \code{dim} both.
+\code{dim}, \code{dimnames}, \code{names} and \code{length} methods. Through them
+\code{nrow}, \code{ncol}, \code{colnames} and \code{NROW}/\code{NCOL} also work.
+\code{nrow} is the number of rows of the current row subset; \code{length} and
+\code{ncol} are the number of columns (as for a \code{data.frame}).
 }
 \examples{
-\dontrun{
-wt = WIDETABLE(name = 'cars', path = tempdir()); wt$add_table(mtcars)
-dim(wt); colnames(wt)
-}
+folder = tempfile(); dir.create(folder)
+wt = as.WIDETABLE(mtcars, name = 'cars', path = folder)
+dim(wt); nrow(wt); ncol(wt); colnames(wt)
+unlink(folder, recursive = TRUE)
 }

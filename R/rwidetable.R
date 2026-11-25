@@ -19,6 +19,10 @@
 # 1.3.4 (07 June 2021)       - wt.R updated to version 1.0.7
 # 1.3.5 (26 November 2026)   - Package renamed rbig -> rwidetable and limited to WIDETABLE and the column I/O tools feeding it
 #                              (SQL, Spark, Athena and ODBC helpers removed). Roxygen2 documentation added.
+# 1.4.0 (26 November 2026)   - WIDETABLE rewritten for speed and reliability (lazy opening via a metadata file, many bug fixes),
+#                              self-contained helpers (no rutils), new features (rbind/cbind/head/tail/dplyr verbs,
+#                              as.WIDETABLE(), parquet2WIDETABLE()), testthat test suite.
+# 1.4.1 (26 November 2026)   - Vignette 'Working with WIDETABLE' and README added.
 
 #' rwidetable: disk-backed wide tables with (virtually) unlimited columns
 #'
@@ -26,9 +30,15 @@
 #' column of a table in its own file, so the number of columns is limited only by the
 #' storage space, while the object can be used much like a \code{data.frame}.
 #' It also includes tools that turn parquet files and row chunks into per-column files
-#' (\code{\link{parquet2RDS}}, \code{\link{RDS2Columns}}, ...).
+#' (\code{\link{parquet2WIDETABLE}}, \code{\link{RDS2Columns}},
+#' \code{\link{RData2Columns}}).
+#'
+#' Start with the vignette: \code{vignette('widetable', package = 'rwidetable')}.
 #'
 #' This package was formerly named \pkg{rbig}.
 #' @author Nicolas Berta
 #' @keywords internal
 "_PACKAGE"
+
+#' @importFrom methods new setRefClass setMethod
+NULL

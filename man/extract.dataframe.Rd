@@ -4,14 +4,14 @@
 \alias{extract.dataframe}
 \title{Read a subset of a WIDETABLE into a data.frame}
 \usage{
-extract.dataframe(obj, rows = NULL, figures = NULL, drop = T)
+extract.dataframe(obj, rows = NULL, figures = NULL, drop = TRUE)
 }
 \arguments{
 \item{obj}{a \code{WIDETABLE}.}
 
-\item{rows}{(integer) row indices; \code{NULL} for all rows.}
+\item{rows}{(integer or logical) rows; \code{NULL} for all rows.}
 
-\item{figures}{(character) column names; \code{NULL} for all columns.}
+\item{figures}{(character, integer or logical) columns; \code{NULL} for all columns.}
 
 \item{drop}{(logical) if \code{TRUE} and a single column is selected, return a vector.}
 }
@@ -19,7 +19,12 @@ extract.dataframe(obj, rows = NULL, figures = NULL, drop = T)
 A \code{data.frame} (or a vector).
 }
 \description{
-Columns already cached are taken from memory; other columns are read from disk.
-As many of the newly read columns as fit in the free cache space are kept in the
-cache.
+Cached columns are taken from memory; other columns are read from disk. Newly read
+columns are added to the cache as long as they fit in the free cache space.
+}
+\examples{
+folder = tempfile(); dir.create(folder)
+wt = as.WIDETABLE(mtcars, name = 'cars', path = folder)
+extract.dataframe(wt, rows = 1:3, figures = c('mpg', 'hp'))
+unlink(folder, recursive = TRUE)
 }

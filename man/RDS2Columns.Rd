@@ -2,9 +2,15 @@
 % Please edit documentation in R/io.R
 \name{RDS2Columns}
 \alias{RDS2Columns}
-\title{Split a set of RDS table chunks into one file per column}
+\title{Split RDS row chunks into one file per column}
 \usage{
-RDS2Columns(path.rds, path.columns, columns = NULL, buffer_size = 100)
+RDS2Columns(
+  path.rds,
+  path.columns,
+  columns = NULL,
+  buffer_size = 100,
+  format = c("rds", "RData")
+)
 }
 \arguments{
 \item{path.rds}{(character) folder containing the chunk files.}
@@ -12,15 +18,32 @@ RDS2Columns(path.rds, path.columns, columns = NULL, buffer_size = 100)
 \item{path.columns}{(character) output folder (created if needed).}
 
 \item{columns}{(character) columns to extract; default all columns of the first chunk.
-Columns already present in \code{path.columns} are skipped.}
+Columns already present in \code{path.columns} are skipped, so an interrupted run
+can be resumed.}
 
 \item{buffer_size}{(integer) number of columns processed per pass. Default 100.}
+
+\item{format}{(character) format of the column files: \code{'rds'} (default) or
+\code{'RData'}.}
 }
 \value{
-Called for its side effect (files written).
+Names of the columns written (invisibly).
 }
 \description{
-Reads the row-chunks written by \code{\link{parquet2RDS}} and writes each column
-to its own \code{.rds} file in \code{path.columns}. Columns are processed in
-buffers of \code{buffer_size} columns to bound memory use.
+Reads row chunks (each \code{.rds} file in \code{path.rds} holds a
+\code{data.frame} with the same columns, files sorted by name give the row order)
+and writes each column to its own file in \code{path.columns}, using the
+\code{\link{WIDETABLE}} layout. The result can be opened with
+\code{WIDETABLE(name = basename(path.columns), path = dirname(path.columns))}.
+Columns are processed in buffers of \code{buffer_size} columns to bound memory use.
+}
+\examples{
+chunks = tempfile(); dir.create(chunks)
+saveRDS(mtcars[1:16, ], file.path(chunks, 'part1.rds'))
+saveRDS(mtcars[17:32, ], file.path(chunks, 'part2.rds'))
+tables = tempfile(); dir.create(tables)
+RDS2Columns(chunks, file.path(tables, 'cars'))
+wt = WIDETABLE(name = 'cars', path = tables)
+dim(wt)
+unlink(c(chunks, tables), recursive = TRUE)
 }

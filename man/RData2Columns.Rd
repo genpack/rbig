@@ -2,9 +2,15 @@
 % Please edit documentation in R/io.R
 \name{RData2Columns}
 \alias{RData2Columns}
-\title{Split a set of RData table chunks into one file per column}
+\title{Split RData row chunks into one file per column}
 \usage{
-RData2Columns(path.RData, path.columns, columns = NULL, buffer_size = 100)
+RData2Columns(
+  path.RData,
+  path.columns,
+  columns = NULL,
+  buffer_size = 100,
+  format = c("RData", "rds")
+)
 }
 \arguments{
 \item{path.RData}{(character) folder containing the chunk files.}
@@ -15,12 +21,15 @@ RData2Columns(path.RData, path.columns, columns = NULL, buffer_size = 100)
 Columns already present in \code{path.columns} are skipped.}
 
 \item{buffer_size}{(integer) number of columns processed per pass. Default 100.}
+
+\item{format}{(character) format of the column files: \code{'RData'} (default) or
+\code{'rds'}.}
 }
 \value{
-Called for its side effect (files written).
+Names of the columns written (invisibly).
 }
 \description{
-Reads the row-chunks written by \code{\link{parquet2RData}} and writes each column
-to its own \code{.RData} file in \code{path.columns}. Columns are processed in
-buffers of \code{buffer_size} columns to bound memory use.
+Like \code{\link{RDS2Columns}}, for chunks stored as \code{.RData} files (each holding
+a \code{data.frame}, named \code{tbl} as written by \code{parquet2RData}, or as the
+only object of the file).
 }
