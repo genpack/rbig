@@ -56,6 +56,12 @@ threshold above which subsetting returns a \code{WIDETABLE} instead of a
 
 \item{\code{format}}{(character) file format of the column files: \code{'rds'} (default for
 new tables) or \code{'RData'}. For an existing table the stored format is used.}
+
+\item{\code{shared}}{(environment) state shared by an object and its copies and subsets: a
+version number per column, increased when values change, so that every object
+sharing the table drops stale cached columns.}
+
+\item{\code{stamps}}{(numeric) version of each cached column when it was cached.}
 }}
 
 \section{Methods}{
@@ -70,6 +76,11 @@ column was added, FALSE otherwise (invisibly).}
 \item{\code{add_table(df, verbose = FALSE, ...)}}{Adds every column of df (a data.frame, tibble or matrix) as a new column.
 Columns whose names already exist are skipped with a warning.}
 
+\item{\code{bump_stamp(cn)}}{Records that the values of column cn changed, so that the caches of all objects
+sharing this table (copies and subsets) are refreshed (internal).}
+
+\item{\code{cache_put(cn, vec)}}{Stores vec as the cached column cn and records its version (internal).}
+
 \item{\code{check_full(action = "This operation")}}{Raises an error if the object is a row subset (used by methods that change the
 number of rows or create column files).}
 
@@ -82,6 +93,8 @@ number of rows or create column files).}
 \item{\code{control_size(keep = character())}}{Drops cached columns, oldest first (except those in keep), until the cache is below
 size_limit.}
 
+\item{\code{drop_stale()}}{Drops stale columns from the cache (internal).}
+
 \item{\code{fetch_column(cn)}}{Returns column cn (rows in row_index) from the cache or from disk, without
 adding it to the cache.}
 
@@ -90,6 +103,9 @@ Arguments are field values, typically name, path, and optionally size_limit and
 format. If folder <path>/<name> exists, the table stored there is opened: its
 metadata file is read (columns are loaded lazily). A folder written by an older
 version of rwidetable/rbig (no metadata file) is scanned once and the metadata file is created.}
+
+\item{\code{is_cached(cn)}}{TRUE if column cn is cached and up to date. A stale cached column (changed
+through another object sharing the table) is dropped (internal).}
 
 \item{\code{is_subset()}}{TRUE if this object represents a subset (or a reordering) of the rows on disk.}
 

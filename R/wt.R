@@ -111,6 +111,10 @@ wt_na_like = function(proto, n){
 #' @field cell_size (numeric) largest observed size in bytes per cell.
 #' @field format (character) file format of the column files: \code{'rds'} (default for
 #'   new tables) or \code{'RData'}. For an existing table the stored format is used.
+#' @field shared (environment) state shared by an object and its copies and subsets: a
+#'   version number per column, increased when values change, so that every object
+#'   sharing the table drops stale cached columns.
+#' @field stamps (numeric) version of each cached column when it was cached.
 #'
 #' @examples
 #' folder = tempfile('wt_example_'); dir.create(folder)
@@ -132,7 +136,8 @@ WIDETABLE = setRefClass(
   'WIDETABLE',
   fields  = list(name = "character", path = "character", meta = 'data.frame', data = 'data.frame',
                  numrows = 'integer', numcols = 'integer', row_index = 'integer', size_limit = "numeric",
-                 cell_size = 'numeric', format = 'character'),
+                 cell_size = 'numeric', format = 'character',
+                 shared = 'environment', stamps = 'numeric'),
   methods = list(
     initialize = function(...){
       "Creates a new WIDETABLE or opens an existing one.
@@ -141,6 +146,9 @@ WIDETABLE = setRefClass(
       metadata file is read (columns are loaded lazily). A folder written by an older
       version of rwidetable/rbig (no metadata file) is scanned once and the metadata file is created."
       callSuper(...)
+      shared <<- new.env()
+      assign('stamp', numeric(0), envir = shared)
+      stamps <<- numeric(0)
       if (is.empty(name)) name <<- paste0('WT', sample(10000:99999, 1))
       if (is.empty(path)) path <<- '.'
       if (is.empty(size_limit)) size_limit <<- 1e9
@@ -317,7 +325,7 @@ WIDETABLE = setRefClass(
       write_column(colname, vec)
       set_meta(colname, vec)
       if (as.numeric(utils::object.size(vec)) <= size_limit){
-        data[[colname]] <<- vec
+        cache_put(colname, vec)
         control_size(keep = colname)
       }
       if (save_meta) write_meta()
@@ -378,21 +386,55 @@ WIDETABLE = setRefClass(
     fetch_column = function(cn){
       "Returns column cn (rows in row_index) from the cache or from disk, without
       adding it to the cache."
-      if (cn %in% names(data)) return(data[[cn]])
+      if (is_cached(cn)) return(data[[cn]])
       assert(cn %in% meta$column, sprintf("Column '%s' does not exist!", cn))
       vec = read_file(cn)
       if (is_subset()) vec = vec[row_index]
       vec
     },
 
+    cache_put = function(cn, vec){
+      "Stores vec as the cached column cn and records its version (internal)."
+      data[[cn]] <<- vec
+      s = shared$stamp[cn]
+      stamps[cn] <<- if (is.null(s) || is.na(s)) 0 else unname(s)
+      invisible(NULL)
+    },
+
+    bump_stamp = function(cn){
+      "Records that the values of column cn changed, so that the caches of all objects
+      sharing this table (copies and subsets) are refreshed (internal)."
+      s = shared$stamp[cn]
+      st = shared$stamp
+      st[cn] = if (is.null(s) || is.na(s)) 1 else s + 1
+      assign('stamp', st, envir = shared)
+      invisible(NULL)
+    },
+
+    is_cached = function(cn){
+      "TRUE if column cn is cached and up to date. A stale cached column (changed
+      through another object sharing the table) is dropped (internal)."
+      if (!(cn %in% names(data))) return(FALSE)
+      s = shared$stamp[cn]
+      if (is.null(s) || is.na(s) || isTRUE(unname(stamps[cn]) == unname(s))) return(TRUE)
+      data[[cn]] <<- NULL
+      FALSE
+    },
+
+    drop_stale = function(){
+      "Drops stale columns from the cache (internal)."
+      for (cn in names(data)) is_cached(cn)
+      invisible(NULL)
+    },
+
     load_column = function(cn){
       "Returns column cn (rows in row_index). The column is read from disk if it is not
       in the cache, and then cached if it fits in size_limit (older cached columns are
       dropped as needed)."
-      if (cn %in% names(data)) return(data[[cn]])
+      if (is_cached(cn)) return(data[[cn]])
       vec = fetch_column(cn)
       if (as.numeric(utils::object.size(vec)) <= size_limit){
-        data[[cn]] <<- vec
+        cache_put(cn, vec)
         control_size(keep = cn)
       }
       vec
@@ -477,7 +519,8 @@ WIDETABLE = setRefClass(
         full[target] = val
         write_column(cn, full)
         update_disk_meta(cn, full)
-        if (cn %in% names(data)) data[[cn]] <<- full[row_index]
+        bump_stamp(cn)
+        if (cn %in% names(data)) cache_put(cn, full[row_index])
       }
       invisible(.self)
     },
@@ -785,6 +828,7 @@ as.WIDETABLE = function(x, name = NULL, path = '.', overwrite = FALSE, ...){
 #' unlink(folder, recursive = TRUE)
 #' @export
 extract.widetable = function(obj, rows = NULL, figures = NULL, update_meta = FALSE){
+  obj$drop_stale()
   figures = if (is.null(figures)) obj$meta$column else wt_cols(obj, figures)
   rows    = wt_rows(obj, rows)
   out     = obj$copy()
@@ -832,6 +876,7 @@ extract.widetable = function(obj, rows = NULL, figures = NULL, update_meta = FAL
 #' unlink(folder, recursive = TRUE)
 #' @export
 extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = TRUE){
+  obj$drop_stale()
   figures = if (is.null(figures)) obj$meta$column else wt_cols(obj, figures)
   rows    = wt_rows(obj, rows)
   cached  = names(obj$data)
@@ -854,9 +899,7 @@ extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = TRUE){
     lst[[k]] = if (is.null(rows)) v else v[rows]
   }
   if (length(newly) > 0){
-    dat = obj$data
-    for (cn in names(newly)) dat[[cn]] = newly[[cn]]
-    obj$data = dat
+    for (cn in names(newly)) obj$cache_put(cn, newly[[cn]])
   }
   if (drop && length(figures) == 1) return(lst[[1]])
   names(lst) = figures
