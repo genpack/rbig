@@ -1,6 +1,6 @@
 # Header
-# Filename:       rbig.R
-# Description:    A toolbox for R programmers for working with huge tables and data-frames
+# Filename:       rwidetable.R
+# Description:    rwidetable (formerly rbig): disk-backed wide tables with unlimited columns
 # Version History:
 # 0.0.1 (05 August 2019)     - Initial Issue
 # 1.0.4 (13 October 2020)    - Second Issue WideTable added
@@ -17,20 +17,18 @@
 # 1.2.7 (22 April 2021)      - wt.R updated: function cor.widetable.multicore() added plus cor.widetable() modified: prints progress info
 # 1.3.2 (07 May 2021)        - wt.R updated: function edit_widetable.substitute() added
 # 1.3.4 (07 June 2021)       - wt.R updated to version 1.0.7
-# 1.3.5 (25 November 2026)   - Roxygen2 documentation added for all functions and WIDETABLE methods.
+# 1.3.5 (26 November 2026)   - Package renamed rbig -> rwidetable and limited to WIDETABLE and the column I/O tools feeding it
+#                              (SQL, Spark, Athena and ODBC helpers removed). Roxygen2 documentation added.
 
-#' rbig: tools for huge and wide tables
+#' rwidetable: disk-backed wide tables with (virtually) unlimited columns
 #'
-#' A toolbox for working with huge tables and data-frames:
-#' \itemize{
-#'   \item \code{\link{WIDETABLE}}: a reference class that stores each column of a
-#'     table in its own file, so the number of columns is limited only by disk space,
-#'     while the object can be used much like a \code{data.frame}.
-#'   \item SQL builders (\code{sql.*}, \code{\link{sqlScript}}, \code{\link{sqlFilter}})
-#'     that compose query text step by step.
-#'   \item Spark helpers (\code{spark.*}) for \pkg{sparklyr} tables, Athena helpers
-#'     (\code{athena.*}) and parquet conversion tools.
-#' }
+#' The package provides \code{\link{WIDETABLE}}, a reference class that stores each
+#' column of a table in its own file, so the number of columns is limited only by the
+#' storage space, while the object can be used much like a \code{data.frame}.
+#' It also includes tools that turn parquet files and row chunks into per-column files
+#' (\code{\link{parquet2RDS}}, \code{\link{RDS2Columns}}, ...).
+#'
+#' This package was formerly named \pkg{rbig}.
 #' @author Nicolas Berta
 #' @keywords internal
 "_PACKAGE"

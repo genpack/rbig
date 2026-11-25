@@ -623,7 +623,7 @@ cor.widetable.multicore = function(wt, n_jobs = 4){
     cl = makeCluster(n_jobs)
     registerDoParallel(cl)
     warnif(getDoParWorkers() < n_jobs, 'Parallel run is not working. It may take too long!')
-    jl = foreach(j = i:nn, .combine = c, .packages = c('magrittr', 'stats', 'dplyr', 'rutils', 'rbig'), .errorhandling = 'pass') %dopar% {
+    jl = foreach(j = i:nn, .combine = c, .packages = c('magrittr', 'stats', 'dplyr', 'rutils', 'rwidetable'), .errorhandling = 'pass') %dopar% {
       if(j == i){
         v = cor(X)
       } else {

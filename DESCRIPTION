@@ -1,20 +1,23 @@
-Package: rbig
+Package: rwidetable
 Type: Package
-Title: A toolbox for R programmers for working with huge size wide tables and data-frames.
+Title: Disk-Backed Wide Tables with (Virtually) Unlimited Columns
 Version: 1.3.5
-Date: 2026-11-25
+Date: 2026-11-26
 Author: Nicolas Berta
 Maintainer: Nicolas Berta <nicolas.berta@gmail.com>
-Description: This package provides a useful general library of R functions 
-  required for working with huge tables (big data).
-  This packages provides a reference class named WIDETABLE which can be used for
-  working with huge data frames having numerous columns.
+Description: Provides WIDETABLE, a reference class that stores each column of a
+  table in its own file, so the number of columns is limited only by the storage
+  space, while the table can be used much like a data.frame (subsetting, column
+  extraction and replacement, row and column binding). Columns are loaded lazily
+  into a size-limited in-memory cache. Also includes tools that convert parquet
+  files and row chunks into per-column files that feed a WIDETABLE.
+  This package was formerly named 'rbig'.
 License: MIT
 LazyData: TRUE
 Collate: 
     'io.R'
     'wt.R'
-    'rbig.R'
+    'rwidetable.R'
 Encoding: UTF-8
 Roxygen: list(markdown = FALSE)
 Config/roxygen2/version: 8.1.1
