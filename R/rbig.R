@@ -17,17 +17,20 @@
 # 1.2.7 (22 April 2021)      - wt.R updated: function cor.widetable.multicore() added plus cor.widetable() modified: prints progress info
 # 1.3.2 (07 May 2021)        - wt.R updated: function edit_widetable.substitute() added
 # 1.3.4 (07 June 2021)       - wt.R updated to version 1.0.7
-# Description for Roxygen
+# 1.3.5 (25 November 2026)   - Roxygen2 documentation added for all functions and WIDETABLE methods.
 
-#' rbig
+#' rbig: tools for huge and wide tables
 #'
-#' This package is a tool-box for working with huge tables and data-frames.
+#' A toolbox for working with huge tables and data-frames:
+#' \itemize{
+#'   \item \code{\link{WIDETABLE}}: a reference class that stores each column of a
+#'     table in its own file, so the number of columns is limited only by disk space,
+#'     while the object can be used much like a \code{data.frame}.
+#'   \item SQL builders (\code{sql.*}, \code{\link{sqlScript}}, \code{\link{sqlFilter}})
+#'     that compose query text step by step.
+#'   \item Spark helpers (\code{spark.*}) for \pkg{sparklyr} tables, Athena helpers
+#'     (\code{athena.*}) and parquet conversion tools.
+#' }
 #' @author Nicolas Berta
-#'
-#' @docType package
-#' @name rbig
-#' 
-#' 
-#' @include io.R
-#' @include wt.R
-
+#' @keywords internal
+"_PACKAGE"

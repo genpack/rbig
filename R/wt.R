@@ -7,6 +7,47 @@
 # 1.0.7     07 June 2021       Minor bug in extract.dataframe() fixed: changed order of columns in the output before fix
 
 ################## WIDE TABLES: ##################
+#' WIDETABLE: a disk-backed table with (virtually) unlimited columns
+#'
+#' A \code{WIDETABLE} is a reference class that stores every column of a table in a
+#' separate file inside the folder \code{<path>/<name>}. Only a subset of columns is
+#' kept in memory (field \code{data}); the total size of the cached columns is kept
+#' below \code{size_limit} bytes. Columns are read from disk on demand, so the number
+#' of columns is limited only by the storage space.
+#'
+#' A \code{WIDETABLE} can be used much like a \code{data.frame}: \code{wt[rows, cols]},
+#' \code{wt[[col]]}, \code{nrow}, \code{ncol}, \code{dim}, \code{colnames},
+#' \code{as.data.frame} and \code{as.matrix} are supported. Subsetting returns a
+#' \code{data.frame} when the result fits in \code{size_limit}, otherwise a new
+#' (row/column subset) \code{WIDETABLE}.
+#'
+#' @field name (character) name of the table; also the name of the folder holding the
+#'   column files. Default: a random name \code{'WTnnnnn'}.
+#' @field path (character) parent folder of the table folder. Default \code{'.'}.
+#' @field meta (data.frame) one row per column with \code{column}, \code{class},
+#'   \code{n_unique} and \code{memsize} (bytes).
+#' @field data (data.frame) in-memory cache of loaded columns.
+#' @field numrows (integer) number of rows of the full table.
+#' @field numcols (integer) number of columns.
+#' @field row_index (integer) indices of the rows (of the full table) this object
+#'   represents; a subset table refers to a subset of rows of the column files.
+#' @field size_limit (numeric) maximum size (bytes) of the in-memory cache.
+#'   Default \code{1e9}.
+#' @field cell_size (numeric) largest observed size (bytes) per cell, used to estimate
+#'   the memory needed for a subset.
+#' @field format (character) file format of the column files: \code{'rds'} or
+#'   \code{'RData'}.
+#'
+#' @examples
+#' \dontrun{
+#' wt = WIDETABLE(name = 'cars', path = tempdir())
+#' wt$add_table(mtcars)
+#' dim(wt)
+#' wt[1:5, c('mpg', 'cyl')]
+#' wt[['hp']]
+#' # re-open the same table later:
+#' wt2 = WIDETABLE(name = 'cars', path = tempdir())
+#' }
 #' @export WIDETABLE
 #' @exportClass WIDETABLE
 WIDETABLE = setRefClass(
@@ -16,6 +57,9 @@ WIDETABLE = setRefClass(
                  cell_size = 'numeric', format = 'character'), 
   methods = list(
     initialize = function(...){
+      "Creates a new WIDETABLE or opens an existing one.
+      Arguments are field values (name, path, format, size_limit, ...). If folder
+      <path>/<name> exists, all column files in it are read and registered."
       callSuper(...)
       if(is.empty(name)){name <<- paste0('WT', sample(10000:99999, 1))}
       if(is.empty(size_limit)){size_limit <<- 10^9}
@@ -63,6 +107,7 @@ WIDETABLE = setRefClass(
     },
     
     save_column = function(cn){
+      "Writes in-memory column cn to its file <path>/<name>/<cn>.<format>."
       assert(!is.null(data[[cn]]), 'Given column does not exist in memory!')
       .fvec = data[[cn]]
       columns_path = path %>% paste(name, sep = '/')
@@ -74,7 +119,10 @@ WIDETABLE = setRefClass(
     },
     
     add_column = function(vec, column_name = NULL, save = T, verbose = T){
-      "Adds a new column to the list of columns"
+      "Adds vector vec as a new column named column_name (default 'X<n>').
+      The vector length must equal the number of rows (the first column sets it).
+      Columns whose name already exists are ignored with a warning.
+      If save is TRUE the column file is written. verbose prints a message."
       nn = length(vec)
       if(is.empty(numrows) | (numrows == 0)){numrows <<- nn; row_index <<- sequence(numrows); data <<- rep(0, nn) %>% as.data.frame %>% {.[-1]}} 
       else {assert(nn == numrows, paste('Added vector must have exactly', numrows, 'elements,', 'but', 'has', nn, '!'))}
@@ -106,6 +154,7 @@ WIDETABLE = setRefClass(
     },
     
     add_table = function(df, save = T){
+      "Adds every column of data.frame df as a new column (see add_column)."
       for(cn in colnames(df)){
         add_column(df[[cn]], column_name = cn, save = save)
       }
@@ -114,6 +163,7 @@ WIDETABLE = setRefClass(
     # update_meta = function(){},
     
     updated_copy = function(){
+      "Returns a new WIDETABLE object with the same fields (sharing the same files)."
       cp = new('WIDETABLE')
       cp$name <- name
       cp$meta <- meta
@@ -129,6 +179,8 @@ WIDETABLE = setRefClass(
     },
     
     load_column = function(cn){
+      "Returns column cn (rows in row_index), reading it from disk and caching it if
+      it is not already in memory."
       if(is.null(data[[cn]])){
         switch(format, 
                'rds' = {paste0(path, '/', name, '/', cn, '.rds') %>% readRDS -> .fvec},
@@ -141,6 +193,8 @@ WIDETABLE = setRefClass(
     
     # ## This function loads all rows of the given columns without considering size. So don't directly use it
     load_columns = function(cols){
+      "Reads columns cols from disk (rows in row_index) and returns them as a
+      data.frame. The memory limit is not checked and the cache is not used."
       out = rep(0, length(row_index)) %>% as.data.frame %>% {.[-1]}
       
       if(format == 'RData'){
@@ -162,6 +216,8 @@ WIDETABLE = setRefClass(
     # if argument save is TRUE, this functions changes the values and automatically saves the changes.
     # So changes will remain in the table.(Values are changed next time you load the widetable)
     set_value = function(rows = NULL, cols = NULL, value, save = T){
+      "Equivalent to x[rows, cols] <- value. rows and cols default to all.
+      cols may be names or indices. If save is TRUE, column files are updated."
       if(is.null(rows)){rows = sequence(length(row_index))}
       if(is.null(cols)){cols = meta$column}
       
@@ -184,18 +240,22 @@ WIDETABLE = setRefClass(
     },
     
     control_size = function(){
+      "Drops cached columns (oldest first) until the cache is below size_limit."
       while(object.size(data) > size_limit){
         data[[1]] <<- NULL
       }
     },
     
     clear = function(){
+      "Empties the in-memory cache."
       data <<- list()
       gc()
     },
     
     # Revisit this function. Maybe use load_columns or '[WIDETABLE' functions
     rbind_dataframe = function(df){
+      "Appends the rows of data.frame df (which must have the same columns) to the
+      table and saves the column files."
       # For now:
       columns = colnames(df)
       assert(columns %==% meta$column, 'Columns of the two table do not match!')
@@ -214,6 +274,7 @@ WIDETABLE = setRefClass(
     
     # Revisit this function. 
     leftjoin_dataframe = function(df, by){
+      "Left-joins data.frame df on columns by and adds its other columns to the table."
       verify(by, 'character', domain = meta$column %^% colnames(df))
       tbl = load_columns(by)
       tbl %<>% left_join(df, by = by)
@@ -235,6 +296,14 @@ WIDETABLE = setRefClass(
     # }
   ))
 
+#' Row-bind tables to a WIDETABLE (draft)
+#'
+#' Draft functions; they call helpers that do not exist yet.
+#' @param x a WIDETABLE.
+#' @param ... tables to bind.
+#' @param y a table to bind.
+#' @keywords internal
+#' @noRd
 rbind_widetables= function(x, ...){
   valid_types = c('data.frame', 'tibble', 'matrix', 'data.table', 'WIDETABLE')
   args = list(...)
@@ -244,6 +313,7 @@ rbind_widetables= function(x, ...){
   return(x)
 }
 
+#' @noRd
 rbind.WIDETABLE = function(x, y){
   if(inherits(y, 'WIDETABLE')){
     x %>% rbind_widetable_with_widetable(y)
@@ -255,28 +325,66 @@ rbind.WIDETABLE = function(x, y){
 
 # Generic Functions:
 
+#' Dimensions and column names of a WIDETABLE
+#'
+#' S4 methods that make a \code{WIDETABLE} behave like a \code{data.frame}.
+#' \code{names} and \code{colnames} return the column names, \code{nrow} the number
+#' of rows (of the current row subset), \code{ncol} and \code{length} the number of
+#' columns and \code{dim} both.
+#'
+#' @param x a \code{WIDETABLE}.
+#' @return \code{names}/\code{colnames}: character; \code{nrow}, \code{ncol},
+#'   \code{length}: integer; \code{dim}: integer vector of length 2.
+#' @name WIDETABLE-dims
+#' @aliases names,WIDETABLE-method colnames,WIDETABLE-method nrow,WIDETABLE-method
+#'   ncol,WIDETABLE-method dim,WIDETABLE-method length,WIDETABLE-method
+#' @examples
+#' \dontrun{
+#' wt = WIDETABLE(name = 'cars', path = tempdir()); wt$add_table(mtcars)
+#' dim(wt); colnames(wt)
+#' }
+NULL
+
+#' @rdname WIDETABLE-dims
 #' @export
 setMethod("names", "WIDETABLE", function(x) x$meta$column %>% unique %>% as.character)
 
+#' @rdname WIDETABLE-dims
 #' @export
 setMethod("colnames", "WIDETABLE", function(x) x$meta$column %>% unique %>% as.character)
 
+#' @rdname WIDETABLE-dims
 #' @export
 setMethod("nrow", "WIDETABLE", function(x) length(x$row_index))
 
+#' @rdname WIDETABLE-dims
 #' @export
 setMethod("ncol", "WIDETABLE", function(x) x$meta$column %>% unique %>% length)
 
 # setMethod("head", "WIDETABLE", function(x, ...) head(x$data, ...))
 # setMethod("tail", "WIDETABLE", function(x, ...) tail(x$data, ...))
+#' @rdname WIDETABLE-dims
 #' @export
 setMethod("dim", "WIDETABLE", function(x) c(length(x$row_index), x$numcols))
 
 # setMethod("colSums", "WIDETABLE", function(x) colSums(x$data))
 # setMethod("rowSums", "WIDETABLE", function(x) rowSums(x$data))
+#' @rdname WIDETABLE-dims
 setMethod("length", "WIDETABLE", function(x) x$meta$column %>% unique %>% length)
 # setMethod("show", "WIDETABLE", function(object) show(object$data))
 
+#' Convert a WIDETABLE to a data.frame or matrix
+#'
+#' Reads all columns (rows of the current row subset) into memory. Make sure the
+#' result fits in memory.
+#'
+#' @param x a \code{WIDETABLE}.
+#' @return A \code{data.frame} or a \code{matrix}.
+#' @name WIDETABLE-convert
+#' @aliases as.data.frame,WIDETABLE-method as.matrix,WIDETABLE-method
+NULL
+
+#' @rdname WIDETABLE-convert
 #' @export
 setMethod("as.data.frame", "WIDETABLE", function(x) {
   x$load_columns(colnames(x)) %>% as.data.frame
@@ -293,6 +401,7 @@ setMethod("as.data.frame", "WIDETABLE", function(x) {
 #   return(out)
 # })
 
+#' @rdname WIDETABLE-convert
 #' @export
 setMethod("as.matrix", "WIDETABLE", function(x) {
   # return(as.data.frame(x) %>% as.matrix)
@@ -300,6 +409,15 @@ setMethod("as.matrix", "WIDETABLE", function(x) {
   x$load_columns(colnames(x)) %>% as.matrix  
 })
 
+#' Extract one column of a WIDETABLE
+#'
+#' @param obj a \code{WIDETABLE}.
+#' @param figure (character) name of the column.
+#' @return The column as a vector (rows of the current row subset).
+#' @examples
+#' \dontrun{
+#' wt[['mpg']]
+#' }
 #' @export
 '[[.WIDETABLE' = function(obj, figure = NULL){
   verify(figure, 'character', domain = colnames(obj), lengths = 1)
@@ -307,6 +425,19 @@ setMethod("as.matrix", "WIDETABLE", function(x) {
 }
 
 # update_meta will update values in the meta table like n_unique and memsize by reading all columns specified in figures
+#' Subset a WIDETABLE, returning a WIDETABLE
+#'
+#' Creates a new \code{WIDETABLE} object that refers to the same column files but to
+#' a subset of rows and columns. No column data are read from disk (unless
+#' \code{update_meta = TRUE}).
+#'
+#' @param obj a \code{WIDETABLE}.
+#' @param rows (integer) row indices (relative to \code{obj}); \code{NULL} for all rows.
+#' @param figures (character) column names.
+#' @param update_meta (logical) if \code{TRUE}, columns not in memory are read to compute
+#'   exact \code{n_unique} and \code{memsize} for the row subset; otherwise they are
+#'   estimated proportionally.
+#' @return A \code{WIDETABLE}.
 #' @export
 extract.widetable = function(obj, rows, figures, update_meta = F){
   out = obj$copy()
@@ -358,6 +489,24 @@ extract.widetable = function(obj, rows, figures, update_meta = F){
   return(out)
 }
 
+#' Subset a WIDETABLE like a data.frame
+#'
+#' \code{wt[rows, cols]} returns a \code{data.frame} if the estimated size of the
+#' result (\code{cell_size * rows * cols}) fits in \code{size_limit}, otherwise a
+#' subset \code{WIDETABLE} (see \code{\link{extract.widetable}}).
+#' \code{wt['col']} or \code{wt[c('a', 'b')]} selects columns.
+#'
+#' @param obj a \code{WIDETABLE}.
+#' @param rows (integer or logical) rows to select, or a character vector of column
+#'   names when \code{figures} is missing.
+#' @param figures (character, integer or logical) columns to select.
+#' @param drop (logical) if \code{TRUE} and a single column is selected, return a vector.
+#' @return A \code{data.frame}, a vector or a \code{WIDETABLE}.
+#' @examples
+#' \dontrun{
+#' wt[1:10, c('mpg', 'hp')]
+#' wt[wt[['cyl']] == 4, ]
+#' }
 #' @export
 '[.WIDETABLE'   = function(obj, rows = NULL, figures = NULL, drop = T){
   if(inherits(rows, 'logical')){rows = which(rows)}
@@ -385,6 +534,17 @@ extract.widetable = function(obj, rows, figures, update_meta = F){
   }
 }
 
+#' Read a subset of a WIDETABLE into a data.frame
+#'
+#' Columns already cached are taken from memory; other columns are read from disk.
+#' As many of the newly read columns as fit in the free cache space are kept in the
+#' cache.
+#'
+#' @param obj a \code{WIDETABLE}.
+#' @param rows (integer) row indices; \code{NULL} for all rows.
+#' @param figures (character) column names; \code{NULL} for all columns.
+#' @param drop (logical) if \code{TRUE} and a single column is selected, return a vector.
+#' @return A \code{data.frame} (or a vector).
 #' @export
 extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
   if(is.null(figures)){figures = unique(obj$meta$column)}
@@ -428,6 +588,16 @@ extract.dataframe = function(obj, rows = NULL, figures = NULL, drop = T){
 }
 
 # Computes cross-correlation for widetables using multi-core
+#' Correlation matrix of a WIDETABLE
+#'
+#' Computes the correlation matrix of all (numeric) columns of a \code{WIDETABLE}
+#' block by block, so that only two blocks of columns are in memory at a time.
+#' \code{cor.widetable.multicore} computes the blocks of each row of the block grid in
+#' parallel with \pkg{doParallel}.
+#'
+#' @param wt a \code{WIDETABLE} with numeric columns.
+#' @param n_jobs (integer) number of parallel workers.
+#' @return A square correlation \code{matrix} with column names as dimnames.
 #' @export
 cor.widetable.multicore = function(wt, n_jobs = 4){
   # todo
@@ -474,6 +644,7 @@ cor.widetable.multicore = function(wt, n_jobs = 4){
 }
 
 # Computes cross-correlation for widetables
+#' @rdname cor.widetable.multicore
 #' @export
 cor.widetable = function(wt){
   # Determine number of partitions:
@@ -509,12 +680,23 @@ cor.widetable = function(wt){
 }
 
 
+#' Replace values in a WIDETABLE
+#'
+#' \code{wt[rows, cols] <- value} and \code{wt[[col]] <- value} change values and save
+#' the affected column files (see the \code{set_value} method of \code{\link{WIDETABLE}}).
+#'
+#' @param obj a \code{WIDETABLE}.
+#' @param value replacement value(s).
+#' @param ... \code{rows} and \code{cols}, passed to \code{set_value}.
+#' @return The modified \code{WIDETABLE}.
+#' @name WIDETABLE-replace
 #' @export
 '[<-.WIDETABLE' = function(obj, value, ...){
   obj$set_value(value = value, ...)
   return(obj)
 }
 
+#' @rdname WIDETABLE-replace
 #' @export
 '[[<-.WIDETABLE' = function(obj, value, ...){
   obj$set_value(value = value, rows = NULL, ...)
@@ -522,6 +704,17 @@ cor.widetable = function(wt){
 }
 
 ################ Extending dplyr functions to support WIDETABLE ######
+#' Select, pull and column-bind with WIDETABLE support
+#'
+#' \code{select} and \code{pull} dispatch to \code{dplyr} for ordinary tables and work
+#' on a \code{WIDETABLE} by column name. \code{cbind} on a \code{WIDETABLE} returns a
+#' copy with the columns of the other tables added; otherwise it calls
+#' \code{base::cbind}.
+#'
+#' @param x a \code{WIDETABLE} or an ordinary table.
+#' @param ... column names (or tidyselect expressions) for \code{select}/\code{pull};
+#'   tables to bind for \code{cbind}.
+#' @return \code{select}: a table; \code{pull}: a vector; \code{cbind}: a table.
 #' @export
 select = function(x, ...){
   lst = try(list(...), silent = T)
@@ -535,6 +728,7 @@ select = function(x, ...){
   }
 }
 
+#' @rdname select
 #' @export
 pull = function(x, ...){
   if(inherits(x, 'WIDETABLE')) {
@@ -546,6 +740,7 @@ pull = function(x, ...){
   else dplyr::pull(x, ...)
 }
 
+#' @rdname select
 #' @export
 cbind = function(x, ...){
   if(inherits(x, 'WIDETABLE')){
@@ -558,15 +753,15 @@ cbind = function(x, ...){
   } else {return(base::cbind(x, ...))}
 }
 
-#' data.matrix = function(x){
-#'   if(inherits(x, 'WIDETABLE')){
-#'     tables = x$load_columns(colnames())
-#'     out    = NULL
-#'     for(tn in tables){
-#'       if(is.null(out)) {out = x$load_table(tn) %>% data.matrix}
-#'       else {out %<>% cbind(x$load_table(tn) %>% data.matrix)}
-#'       x$control_size()
-#'     }
-#'     return(out)
-#'   } else {return(base::data.matrix(x))}  
-#' }
+# data.matrix = function(x){
+#   if(inherits(x, 'WIDETABLE')){
+#     tables = x$load_columns(colnames())
+#     out    = NULL
+#     for(tn in tables){
+#       if(is.null(out)) {out = x$load_table(tn) %>% data.matrix}
+#       else {out %<>% cbind(x$load_table(tn) %>% data.matrix)}
+#       x$control_size()
+#     }
+#     return(out)
+#   } else {return(base::data.matrix(x))}  
+# }

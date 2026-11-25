@@ -42,9 +42,45 @@
 # script.sql.from   = function(dbName,tableName){}
 # script.sql.where  =
 
+#' Valid filter elements and field types
+#'
+#' \code{valid.filter.elements} lists the names allowed in a filter list passed to
+#' \code{\link{sqlFilter}} and \code{\link{rScriptFilter}}. \code{valid.field.types}
+#' lists the values allowed for the \code{type} element of a filter.
+#' @keywords internal
+#' @noRd
 valid.filter.elements = c('domain', 'min', 'max', 'type', 'na.rm', 'equal', 'query')
 valid.field.types     = c('nominal', 'numeric', 'date', 'time')
 
+#' Build an SQL \code{WHERE} condition for one column
+#'
+#' Converts a filter specification (a named list) into the text of an SQL condition
+#' that can be used in a \code{WHERE} clause.
+#'
+#' @param colName (character) name of the column the filter applies to.
+#' @param filter (list) filter specification. Allowed elements are:
+#' \describe{
+#'   \item{\code{type}}{one of \code{'nominal'} (default), \code{'numeric'}, \code{'date'}
+#'     or \code{'time'}.}
+#'   \item{\code{domain}}{vector of allowed values (\code{nominal} and \code{numeric} types).}
+#'   \item{\code{min}, \code{max}}{lower and upper bounds (\code{numeric}, \code{date} and
+#'     \code{time} types).}
+#'   \item{\code{equal}}{(logical) if \code{TRUE}, bounds are inclusive (\code{>=}, \code{<=}).
+#'     Default \code{FALSE}.}
+#'   \item{\code{na.rm}}{(logical) if \code{TRUE}, adds \code{IS NOT NULL}. Default \code{FALSE}.}
+#'   \item{\code{query}}{(character) a sub-query; if given, the condition is
+#'     \code{colName IN (query)} and other elements are ignored.}
+#' }
+#' @param vf (logical) if \code{TRUE} (default), the filter is verified before use.
+#' @return (character) the SQL condition, or \code{""} if the filter imposes no condition.
+#' @seealso \code{\link{rScriptFilter}}, \code{\link{sqlScript}}
+#' @examples
+#' \dontrun{
+#' sqlFilter('age', list(type = 'numeric', min = 18, max = 65, equal = TRUE))
+#' # "age >= 18 AND age <= 65"
+#' sqlFilter('state', list(domain = c('NSW', 'VIC')))
+#' # "state IN ('NSW','VIC')"
+#' }
 #' @export
 sqlFilter = function(colName, filter, vf = T){
   if(vf){
@@ -147,6 +183,20 @@ sqlFilter = function(colName, filter, vf = T){
   return(scr)
 }
 
+#' Build an R logical expression for one column
+#'
+#' The R counterpart of \code{\link{sqlFilter}}: converts a filter specification into
+#' the text of an R expression that evaluates to a logical vector, for example to be
+#' used with \code{dplyr::filter} after \code{parse()}.
+#'
+#' @inheritParams sqlFilter
+#' @return (character) the R expression, or \code{""} if the filter imposes no condition.
+#' @seealso \code{\link{sqlFilter}}
+#' @examples
+#' \dontrun{
+#' rScriptFilter('age', list(type = 'numeric', min = 18, na.rm = TRUE))
+#' # "age > 18 & !is.na(age)"
+#' }
 #' @export
 rScriptFilter = function(colName, filter, vf = T){
   if(vf){
@@ -228,6 +278,24 @@ rScriptFilter = function(colName, filter, vf = T){
 }
 
 
+#' Generate an SQL \code{SELECT} query
+#'
+#' Builds a complete \code{SELECT ... FROM dbName.tableName WHERE ...} query.
+#'
+#' @param tableName (character) name of the table.
+#' @param fields (character) columns to select. Default \code{'*'}. If the vector is named,
+#'   non-empty names are used as aliases (\code{field AS name}).
+#' @param dbName (character) name of the database (schema) containing the table.
+#' @param filter (list) named list of filters; each name is a column name and each
+#'   element is a filter specification as described in \code{\link{sqlFilter}}.
+#'   Conditions are combined with \code{AND}.
+#' @param vf (logical) if \code{TRUE} (default), arguments are verified.
+#' @return (character) the SQL query.
+#' @examples
+#' \dontrun{
+#' sqlScript('customers', fields = c(id = 'cust_id', 'age'), dbName = 'sales',
+#'           filter = list(age = list(type = 'numeric', min = 18)))
+#' }
 #' @export
 sqlScript = function(tableName, fields = NULL, dbName = 'UDRBSCMS', filter = NULL, vf = T){
   if(vf){
@@ -259,6 +327,16 @@ sqlScript = function(tableName, fields = NULL, dbName = 'UDRBSCMS', filter = NUL
 }
 
 
+#' Read a table through ODBC
+#'
+#' Generates a query with \code{\link{sqlScript}}, runs it through an ODBC connection
+#' (package \pkg{RODBC}) and returns the result.
+#'
+#' @inheritParams sqlScript
+#' @param dsn (character) ODBC data source name.
+#' @param ... further arguments passed to \code{RODBC::odbcConnect} and \code{RODBC::sqlQuery}.
+#' @return A \code{data.frame} with the query result.
+#' @keywords internal
 readODBC <- function(tableName, fields = NULL, filter = NULL, dbName, dsn, vf = T, ...){
   # Verifications:
   if(vf){assert(require(RODBC), "Package 'RODBC' is not installed!", err_src = match.call()[[1]])}
@@ -269,6 +347,18 @@ readODBC <- function(tableName, fields = NULL, filter = NULL, dbName, dsn, vf = 
   return(D)
 }
 
+#' Run an SQL query through ODBC
+#'
+#' Opens an ODBC connection (package \pkg{RODBC}), runs the query, closes the
+#' connection and returns the result.
+#'
+#' @param query (character) SQL query to run.
+#' @param ... arguments passed to \code{RODBC::odbcConnect}, for example \code{dsn}.
+#' @return A \code{data.frame} with the query result.
+#' @examples
+#' \dontrun{
+#' runSQL("SELECT * FROM sales.customers", dsn = 'MyDSN')
+#' }
 #' @export
 runSQL <- function(query, ...){
   channel    = odbcConnect(...)
@@ -279,6 +369,15 @@ runSQL <- function(query, ...){
 
 ################## SPARK TOOLS ###############################
 
+#' Connect to a local Spark instance with memory settings
+#'
+#' @param mem.exec (character) \code{spark.executor.memory}.
+#' @param mem.shell_driver (character) \code{sparklyr.shell.driver-memory}.
+#' @param mem.shell.exec (character) \code{sparklyr.shell.executor-memory}.
+#' @param mem.max_result (character) \code{spark.driver.maxResultSize}.
+#' @param mem.yarn_exec_overhead (character) \code{spark.yarn.executor.memoryOverhead}.
+#' @return A \code{spark_connection} object (package \pkg{sparklyr}).
+#' @keywords internal
 spark.local = function(mem.exec = "64G", mem.shell_driver = "64G", mem.shell.exec = "64G", mem.max_result = "4G", mem.yarn_exec_overhead = "16G"){  
   config <- spark_config()
   config$spark.executor.memory <- mem.exec
@@ -290,6 +389,13 @@ spark.local = function(mem.exec = "64G", mem.shell_driver = "64G", mem.shell.exe
 }
 
 
+#' Read a CSV file into a local Spark session
+#'
+#' Connects to a local Spark instance and reads a CSV file (local path or S3 URI)
+#' as a Spark table named \code{'el'}.
+#'
+#' @param path (character) path or URI of the CSV file(s).
+#' @return A \code{tbl_spark} object.
 #' @export
 spark.read_s3 = function(path){
   sc <- sparklyr::spark_connect(master = 'local')
@@ -305,6 +411,13 @@ spark.read_s3 = function(path){
 #' \code{input_col (character)}: colname to be binned, must have numeric values
 #' \code{output_col (character)}: column name to be generated as a result of binning
 #' \code{ splits (named numeric)}: named numeric vector containing splits and labels for them
+#' @return The input table with the binned columns added.
+#' @examples
+#' \dontrun{
+#' df = data.frame(age = c(5, 25, 70))
+#' spark.bin(df, list(list(input_col = 'age', output_col = 'age_band',
+#'                         splits = c(young = 0, adult = 18, senior = 65, old = Inf))))
+#' }
 #' @export
 spark.bin = function(df, binners){
   if(inherits(df, c('data.frame', 'tibble'))){
@@ -328,6 +441,18 @@ spark.bin = function(df, binners){
 }
 
 # 2btransferred to gener or niraspark (sparker)?
+#' Rename columns using character arguments
+#'
+#' A standard-evaluation wrapper around \code{dplyr::rename} that works with
+#' \code{data.frame}s and Spark tables.
+#'
+#' @param tbl a \code{data.frame}, tibble or \code{tbl_spark}.
+#' @param ... named character values in the form \code{new_name = 'old_name'}.
+#' @return The table with renamed columns.
+#' @examples
+#' \dontrun{
+#' spark.rename(mtcars, cylinders = 'cyl')
+#' }
 #' @export
 spark.rename = function(tbl, ...){
   ns = c(...) %>% verify('character')
@@ -337,6 +462,18 @@ spark.rename = function(tbl, ...){
   parse(text = scr) %>% eval
 }
 
+#' Add columns using character expressions
+#'
+#' A standard-evaluation wrapper around \code{dplyr::mutate} that works with
+#' \code{data.frame}s and Spark tables.
+#'
+#' @param tbl a \code{data.frame}, tibble or \code{tbl_spark}.
+#' @param ... named character values in the form \code{new_column = 'expression'}.
+#' @return The table with the new columns.
+#' @examples
+#' \dontrun{
+#' spark.mutate(mtcars, power_per_cyl = 'hp / cyl')
+#' }
 #' @export
 spark.mutate = function(tbl, ...){
   ns = c(...) %>% verify('character')
@@ -346,6 +483,18 @@ spark.mutate = function(tbl, ...){
   parse(text = scr) %>% eval
 }
 
+#' Select columns by name
+#'
+#' A standard-evaluation wrapper around \code{dplyr::select}. Names not found in the
+#' table are ignored.
+#'
+#' @param tbl a \code{data.frame}, tibble or \code{tbl_spark}.
+#' @param ... character column names.
+#' @return The table restricted to the given columns.
+#' @examples
+#' \dontrun{
+#' spark.select(mtcars, 'mpg', 'cyl')
+#' }
 #' @export
 spark.select = function(tbl, ...){
   ns = c(...) %>% verify('character') %>% intersect(colnames(tbl))
@@ -354,6 +503,18 @@ spark.select = function(tbl, ...){
   parse(text = scr) %>% eval
 }
 
+#' Drop columns by name
+#'
+#' A standard-evaluation wrapper around \code{dplyr::select(-col)}. Names not found
+#' in the table are ignored.
+#'
+#' @param tbl a \code{data.frame}, tibble or \code{tbl_spark}.
+#' @param ... character column names to drop.
+#' @return The table without the given columns.
+#' @examples
+#' \dontrun{
+#' spark.unselect(mtcars, 'mpg')
+#' }
 #' @export
 spark.unselect = function(tbl, ...){
   ns = c(...) %>% verify('character') %>% intersect(colnames(tbl))
@@ -362,6 +523,19 @@ spark.unselect = function(tbl, ...){
   parse(text = scr) %>% eval
 }
 
+#' One-hot encode categorical columns of a Spark table
+#'
+#' Converts each given column to character, indexes it with
+#' \code{sparklyr::ft_string_indexer} and expands it into one indicator column per
+#' category (named \code{<column>_<category>}) with \code{sparklyr::ft_one_hot_encoder}.
+#' Columns with two or fewer categories are left as they are.
+#'
+#' @param tbl a \code{tbl_spark}.
+#' @param ... character names of the categorical columns.
+#' @param keep_original (logical) keep the original columns? Default \code{TRUE}.
+#' @param keep_index (logical) keep the intermediate \code{<column>_Index} columns?
+#'   Default \code{FALSE}.
+#' @return The Spark table with the indicator columns added.
 #' @export
 spark.dummify = function(tbl, ..., keep_original = T, keep_index = F){
   cat_cols = c(...) %>% verify('character', domain = colnames(tbl), default = character()) %>% unique
@@ -395,6 +569,21 @@ spark.dummify = function(tbl, ..., keep_original = T, keep_index = F){
 
 ################## ATHENA SQL TOOLS ###############################
 
+#' Create an external Athena table over data in S3
+#'
+#' Runs a \code{CREATE EXTERNAL TABLE} statement through a \pkg{pyathena} connection.
+#'
+#' @param conn a \pkg{pyathena} connection, as returned by \code{\link{athena.buildConnection}}.
+#' @param dsName (character) name of the Athena database.
+#' @param tblName (character) name of the table to create.
+#' @param column_types (named character) column types (for example
+#'   \code{c(caseid = 'STRING', value = 'FLOAT')}); names are column names.
+#' @param id_columns (character) names of the partition columns.
+#' @param s3_data_path (character) S3 location of the data.
+#' @param drop_if_exists (logical) drop an existing table with the same name first?
+#'   Default \code{TRUE}.
+#' @param format (character) data format: \code{'parquet'} (default) or \code{'csv'}.
+#' @return Called for its side effect; returns the \pkg{pyathena} cursor result invisibly.
 #' @export
 athena.buildTable = function(conn, dsName, tblName, column_types, id_columns, s3_data_path, drop_if_exists = T, format = c('parquet', 'csv')){
   cursor = conn$cursor()
@@ -425,6 +614,23 @@ athena.buildTable = function(conn, dsName, tblName, column_types, id_columns, s3
 
 
 
+#' Open a connection to AWS Athena
+#'
+#' Uses the Python package \pkg{pyathena} through \pkg{reticulate}.
+#'
+#' @param bucket (character) S3 staging directory for query results
+#'   (for example \code{'s3://my-bucket/athena/'}).
+#' @param region (character) AWS region name.
+#' @param profile (character) optional AWS profile name.
+#' @param aws_config_path (character) optional folder containing the AWS \code{config}
+#'   and \code{credentials} files. If given, environment variables
+#'   \code{AWS_CONFIG_FILE} and \code{AWS_SHARED_CREDENTIALS_FILE} are set accordingly.
+#' @param ... further arguments passed to \code{pyathena.connect}.
+#' @return A \pkg{pyathena} connection object.
+#' @examples
+#' \dontrun{
+#' con = athena.buildConnection('s3://my-bucket/athena/', region = 'ap-southeast-2')
+#' }
 #' @export
 athena.buildConnection = function(bucket, 
                                   region, profile = NULL, 
@@ -441,6 +647,17 @@ athena.buildConnection = function(bucket,
   pyathena$connect(s3_staging_dir = bucket, region_name = region, profile = profile, ...)
 }
 
+#' Run an Athena query and return the result as a data.frame
+#'
+#' @param con a \pkg{pyathena} connection.
+#' @param query (character) SQL query.
+#' @param max_rows (integer) optional limit. If given, the number of rows of the result
+#'   is counted first and an error is raised if it exceeds \code{max_rows}.
+#' @return A \code{data.frame} (converted from a pandas DataFrame).
+#' @examples
+#' \dontrun{
+#' athena.read_s3(con, sql.head('SELECT * FROM event.eventlogs', 10))
+#' }
 #' @export
 athena.read_s3   = function(con, query, max_rows = NULL){
   pandas   = reticulate::import('pandas')
@@ -452,6 +669,11 @@ athena.read_s3   = function(con, query, max_rows = NULL){
   else pandas$read_sql(query, con)
 }
 
+#' Create an Athena database
+#'
+#' @param conn a \pkg{pyathena} connection.
+#' @param dsName (character) name of the database to create.
+#' @return Called for its side effect.
 #' @export
 athena.buildDataset = function(conn, dsName = 'dataset'){
   cursor = conn$cursor()
@@ -463,6 +685,16 @@ athena.buildDataset = function(conn, dsName = 'dataset'){
 # acon = buildAthenaConnection()
 # buildAthenaTable(acon, dsName = 'event', tblName = 'eventlogs', s3_data_path = datapath, drop_if_exists = T)
 
+#' Build a case-by-time-category feature table from an event log (SQL)
+#'
+#' For each case, time category and variable, takes the latest value (by timestamp)
+#' and pivots the variables into columns with \code{\link{sql.cast}}.
+#'
+#' @param input (character) SQL query or table name of the event log.
+#' @param caseid_col,ts_col,et_col,var_col,value_col,tscat_col (character) names of the
+#'   case id, timestamp, event type, variable, value and time-category columns.
+#' @param variables (character) variables to pivot into columns.
+#' @return (character) SQL query.
 #' @export
 sql.mlMapper = function(input, caseid_col, ts_col, et_col, var_col, value_col, tscat_col, variables){
   cvpr = paste0("select ", caseid_col, ", ", tscat_col, ", ", var_col, ", max_by(", value_col, ", ", ts_col, ") as latestValue from (", input, ") group by ", caseid_col, ", ", tscat_col, ", ", var_col)
@@ -476,6 +708,16 @@ sql.mlMapper = function(input, caseid_col, ts_col, et_col, var_col, value_col, t
   cvpr
 }
 
+#' Add a \code{GROUP BY} clause to a query
+#'
+#' Intended to be piped into \code{\link{sql.summarise}}.
+#'
+#' @param input (character) SQL query or table name.
+#' @param ... character names of the grouping columns.
+#' @return A list with elements \code{query} (character) and \code{id_cols}
+#'   (the grouping columns).
+#' @examples
+#' 'sales.orders' %>% sql.group_by('customer') %>% sql.summarise(total = 'SUM(amount)')
 #' @export
 sql.group_by = function(input, ...){
   by    = c(...)
@@ -483,6 +725,15 @@ sql.group_by = function(input, ...){
   list(query = query, id_cols = by)
 }
 
+#' Build an aggregating \code{SELECT} query
+#'
+#' @param input (character) SQL query or table name, or the list returned by
+#'   \code{\link{sql.group_by}}.
+#' @param ... named character aggregation expressions (\code{alias = 'SUM(x)'}), or a
+#'   single named list of them.
+#' @return (character) SQL query.
+#' @examples
+#' sql.summarise('sales.orders', n = 'COUNT(*)', total = 'SUM(amount)')
 #' @export
 sql.summarise = function(input, ...){
   if(inherits(input, 'list')){
@@ -506,6 +757,21 @@ sql.summarise = function(input, ...){
   qry %>% paste0(" FROM ", input)
 }
 
+#' Pivot a long table into a wide table (SQL)
+#'
+#' Builds a query that turns rows of (\code{id_col}, \code{var_col}, \code{value_col})
+#' into one column per variable, aggregating with \code{aggregator}. A \code{Count}
+#' column with the number of non-null values per id is added.
+#'
+#' @param input (character) SQL query or table name of the long table.
+#' @param id_col (character) id column(s) to group by.
+#' @param var_col (character) column containing the variable names.
+#' @param value_col (character) column containing the values.
+#' @param variables (character) variables to turn into columns.
+#' @param aggregator (character) SQL aggregate function. Default \code{'SUM'}.
+#' @return (character) SQL query.
+#' @examples
+#' sql.cast('event.eventlogs', 'caseid', 'variable', 'value', variables = c('Income', 'Age'))
 #' @export
 sql.cast = function(input, id_col, var_col, value_col, variables, aggregator = 'SUM'){
   qry = paste0("SELECT ",  id_col %>% paste(collapse = ','),  ",", "\n")
@@ -518,6 +784,15 @@ sql.cast = function(input, id_col, var_col, value_col, variables, aggregator = '
 # Example:
 # athenaTableCast('event.eventlogs', 'caseid', 'variable', 'value', variables = c('OriginationChannel', 'Income'))
 
+#' Wrap a query in a filtering \code{SELECT}
+#'
+#' @param input (character) SQL query or table name.
+#' @param ... named character conditions in the form \code{column = "> 5"}: each
+#'   condition is written as \code{column <condition>}; conditions are combined with
+#'   \code{AND}. A single named list is also accepted.
+#' @return (character) SQL query.
+#' @examples
+#' sql.filter('sales.orders', amount = '> 100', status = "= 'paid'")
 #' @export
 sql.filter = function(input, ...){
   filter = list(...)
@@ -536,8 +811,12 @@ sql.filter = function(input, ...){
 }
 
 
-# Returns the case profile containing the latest values of each variable
-# input must be in eventlog format:
+#' Case profile from an event log (legacy version)
+#'
+#' Superseded by \code{\link{sql.caseProfile}}. Returns the latest value of each
+#' variable per case, optionally joined with first/last event times and closure time.
+#' @keywords internal
+#' @noRd
 sql.caseProfile.old = function(input, caseid_col, ts_col, et_col, var_col, value_col, variables, closure_event = 'HomeLoanClosed', with_times = T){
   cvpr = paste0("select ", caseid_col, ", ", var_col, ", max_by(", value_col, ", ", ts_col, ") as latestValue from (", input, ") group by ", caseid_col, ", ", var_col)
   cprf = sql.cast(cvpr, id_col = caseid_col, var_col = var_col, value_col = 'latestValue', variables = variables, aggregator = 'SUM')
@@ -552,6 +831,34 @@ sql.caseProfile.old = function(input, caseid_col, ts_col, et_col, var_col, value
   } else {return(cprf)}
 }
 
+#' Build a case profile query from an event log (SQL)
+#'
+#' Aggregates an event log (one row per event attribute: case id, event time, event
+#' type, attribute name and value) into one row per case, with the requested summary
+#' columns. Uses Presto/Athena functions \code{MIN_BY} and \code{MAX_BY}.
+#'
+#' @param input (character) SQL query or table name of the event log.
+#' @param caseid_col,eventtime_col,eventtype_col,attribute_col,value_col (character)
+#'   names of the case id, event time, event type, attribute and value columns.
+#' @param first_event_type,first_event_time,last_event_type,last_event_time (logical)
+#'   add columns \code{firstEventType}, \code{firstEventTime}, \code{lastEventType},
+#'   \code{lastEventTime}?
+#' @param first_event_times,last_event_times (character) event types for which the
+#'   first/last time of occurrence is added (\code{<event>_first_time},
+#'   \code{<event>_last_time}).
+#' @param first_event_attributes,last_event_attributes (list) each element is a list with
+#'   \code{type} (event type) and \code{attributes} (character); adds the value of each
+#'   attribute at the first/last event of that type (\code{<type>_first_<attr>},
+#'   \code{<type>_last_<attr>}).
+#' @param first_attribute_times,last_attribute_times (character) attributes for which
+#'   the first/last time they were recorded is added.
+#' @param first_attribute_values,last_attribute_values (character) attributes for which
+#'   the first/last recorded value is added (\code{first_<attr>}, \code{last_<attr>}).
+#' @param sum_attribute_values (character) attributes whose values are summed.
+#' @return (character) SQL query.
+#' @examples
+#' sql.caseProfile('event.eventlogs', last_event_time = TRUE,
+#'                 last_attribute_values = c('Income', 'Balance'))
 #' @export
 sql.caseProfile = function(
   input, 
@@ -642,16 +949,38 @@ sql.caseProfile = function(
 }
 
 
+#' Add an \code{ORDER BY} clause
+#'
+#' @param input (character) SQL query.
+#' @param by (character) columns to order by (\code{'col DESC'} is allowed).
+#' @return (character) SQL query.
+#' @examples
+#' sql.arrange('SELECT * FROM sales.orders', c('customer', 'amount DESC'))
 #' @export
 sql.arrange = function(input, by){
   paste0(input, " ORDER BY ", by %>% paste(collapse = ","))
 }
 
+#' Left-join two queries
+#'
+#' @param table1,table2 (character) SQL queries (or \code{SELECT * FROM table}).
+#' @param by (character) name of the join column (present in both).
+#' @return (character) SQL query.
+#' @examples
+#' sql.leftjoin('SELECT * FROM a', 'SELECT * FROM b', by = 'id')
 #' @export
 sql.leftjoin = function(table1, table2, by){
   paste0("SELECT * FROM (", table1, ") a LEFT JOIN (", table2, ") b ON a.", by, " = b.", by)
 }
 
+#' Build a \code{SELECT} query with optional aliases
+#'
+#' @param input (character) SQL query or table name.
+#' @param ... character expressions to select; named arguments become aliases
+#'   (\code{alias = 'expression'}). A single list is also accepted.
+#' @return (character) SQL query.
+#' @examples
+#' sql.select('sales.orders', 'customer', total = 'amount * 1.1')
 #' @export
 sql.select = function(input, ...){
   arg = list(...)
@@ -672,6 +1001,14 @@ sql.select = function(input, ...){
   qry %>% paste0(" FROM (", input, ") ")
 }
 
+#' Add computed columns to a query
+#'
+#' @param input (character) SQL query or table name.
+#' @param ... named character expressions (\code{new_column = 'expression'}).
+#'   A single named list is also accepted.
+#' @return (character) SQL query: \code{SELECT *, expr AS name ... FROM (input)}.
+#' @examples
+#' sql.mutate('event.eventlogs', fvalue = 'CAST(value AS DOUBLE)')
 #' @export
 sql.mutate = function(input, ...){
   arg = list(...)
@@ -700,6 +1037,15 @@ sql.mutate = function(input, ...){
 
 # Example:
 # sql.binColumn('LoanTenure', breaks = c('< 1 Yr' = 365, '1-2 Yrs' = 730, '2-3 Yrs' = 1095, '3-4 Yrs' = 1460, '4-5 Yrs' = 1825, '> 6 Yrs' = 2190))
+#' Build an SQL \code{CASE} expression that bins a numeric column
+#'
+#' @param column (character) name of the numeric column.
+#' @param breaks (named numeric) upper bounds of the bins; names are the bin labels.
+#'   The last bin is the \code{ELSE} branch.
+#' @return (character) SQL \code{CASE ... END} expression, usable in
+#'   \code{\link{sql.mutate}}.
+#' @examples
+#' sql.binColumn('tenure', c('< 1 Yr' = 365, '1-2 Yrs' = 730, '> 2 Yrs' = Inf))
 #' @export
 sql.binColumn = function(column, breaks){
   breaks %<>% sort
@@ -728,6 +1074,13 @@ sql.binColumn = function(column, breaks){
   return(mutscr)
 }
 
+#' Limit a query to its first rows
+#'
+#' @param input (character) SQL query.
+#' @param n (integer) maximum number of rows. Default 6.
+#' @return (character) SQL query.
+#' @examples
+#' sql.head('SELECT * FROM sales.orders', 10)
 #' @export
 sql.head = function(input, n = 6){
   'SELECT * from (' %>% paste(input, ') LIMIT', n)
@@ -735,11 +1088,19 @@ sql.head = function(input, n = 6){
 
 
 
+#' Count the rows of a query
+#'
+#' @param input (character) SQL query.
+#' @return (character) SQL query returning a single count.
+#' @examples
+#' sql.nrow('SELECT * FROM sales.orders')
 #' @export
 sql.nrow = function(input){
   "SELECT COUNT(*) FROM (" %>% paste0(input, ")")
 }
 
+# Duplicate definition of sql.cast(); this one overrides the one above.
+#' @rdname sql.cast
 #' @export
 sql.cast = function(input, id_col, var_col, value_col, variables, aggregator = 'SUM'){
   qry = paste0("SELECT ",  id_col %>% paste(collapse = ','),  ",", "\n")
@@ -752,6 +1113,11 @@ sql.cast = function(input, id_col, var_col, value_col, variables, aggregator = '
 
 ################## PARQUET TOOLS ###############################
 
+#' Convert parquet files to one RDS file per column (legacy, broken)
+#'
+#' Legacy draft superseded by \code{\link{parquet2RDS}} + \code{\link{RDS2Columns}}.
+#' @keywords internal
+#' @noRd
 parquet2calumns.old = function(path.parquet, path.columns, features){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
   tns = list.files(path.columns) %>% stringr::str_remove('.rds')
@@ -770,6 +1136,16 @@ parquet2calumns.old = function(path.parquet, path.columns, features){
 
 
 # SLOW
+#' Convert a folder of parquet files to CSV files
+#'
+#' Each \code{*.snappy.parquet} file in \code{path.parquet} is written as a CSV file
+#' with the same base name in \code{path.csv}. Files already converted are skipped.
+#' Requires package \pkg{arrow}.
+#'
+#' @param path.parquet (character) folder containing the parquet files.
+#' @param path.csv (character) output folder.
+#' @param columns (character) optional subset of columns to keep.
+#' @return Called for its side effect (files written).
 #' @export
 parquet2csv = function(path.parquet, path.csv, columns = NULL){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
@@ -785,6 +1161,16 @@ parquet2csv = function(path.parquet, path.csv, columns = NULL){
   }
 }
 
+#' Convert a folder of parquet files to RData files
+#'
+#' Each \code{*.snappy.parquet} file is read with \pkg{arrow} and saved as an
+#' \code{.RData} file (containing an object named \code{tbl}) in \code{path.RData}.
+#' Files already converted are skipped.
+#'
+#' @param path.parquet (character) folder containing the parquet files.
+#' @param path.RData (character) output folder (created if needed).
+#' @param columns (character) optional subset of columns to keep.
+#' @return Called for its side effect (files written).
 #' @export
 parquet2RData = function(path.parquet, path.RData, columns = NULL){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
@@ -808,6 +1194,19 @@ parquet2RData = function(path.parquet, path.RData, columns = NULL){
 }
 
 
+#' Read a folder of parquet files into one data.frame
+#'
+#' Reads every file in \code{path.parquet} (except \code{_SUCCESS}) with \pkg{arrow}
+#' and binds the rows. This is the usual layout written by Spark.
+#'
+#' @param path.parquet (character) folder containing the parquet files.
+#' @param columns (character) optional subset of columns to read.
+#' @param silent (logical) if \code{FALSE}, prints the name of each file read.
+#' @return A tibble / \code{data.frame}.
+#' @examples
+#' \dontrun{
+#' df = parquet2DataFrame('data/customers.parquet', columns = c('id', 'age'))
+#' }
 #' @export
 parquet2DataFrame = function(path.parquet, columns = NULL, silent = T){
   ons = list.files(path.parquet) %-% '_SUCCESS'
@@ -828,6 +1227,18 @@ parquet2DataFrame = function(path.parquet, columns = NULL, silent = T){
   return(out)
 }
 
+#' Split a set of RData table chunks into one file per column
+#'
+#' Reads the row-chunks written by \code{\link{parquet2RData}} and writes each column
+#' to its own \code{.RData} file in \code{path.columns}. Columns are processed in
+#' buffers of \code{buffer_size} columns to bound memory use.
+#'
+#' @param path.RData (character) folder containing the chunk files.
+#' @param path.columns (character) output folder (created if needed).
+#' @param columns (character) columns to extract; default all columns of the first chunk.
+#'   Columns already present in \code{path.columns} are skipped.
+#' @param buffer_size (integer) number of columns processed per pass. Default 100.
+#' @return Called for its side effect (files written).
 #' @export
 RData2Columns = function(path.RData, path.columns, columns = NULL, buffer_size = 100){
   if(!file.exists(path.columns)) dir.create(path.columns)
@@ -858,6 +1269,15 @@ RData2Columns = function(path.RData, path.columns, columns = NULL, buffer_size =
 }
 
 
+#' Convert a folder of parquet files to RDS files
+#'
+#' Each \code{*.snappy.parquet} file is read with \pkg{arrow} and saved as an
+#' \code{.rds} file with the same base name. Files already converted are skipped.
+#'
+#' @param path.parquet (character) folder containing the parquet files.
+#' @param path.rds (character) output folder (created if needed).
+#' @param columns (character) optional subset of columns to keep.
+#' @return Called for its side effect (files written).
 #' @export
 parquet2RDS = function(path.parquet, path.rds, columns = NULL){
   ons = list.files(path.parquet) %>% stringr::str_remove('.snappy.parquet')
@@ -877,6 +1297,18 @@ parquet2RDS = function(path.parquet, path.rds, columns = NULL){
 }
 
 
+#' Split a set of RDS table chunks into one file per column
+#'
+#' Reads the row-chunks written by \code{\link{parquet2RDS}} and writes each column
+#' to its own \code{.rds} file in \code{path.columns}. Columns are processed in
+#' buffers of \code{buffer_size} columns to bound memory use.
+#'
+#' @param path.rds (character) folder containing the chunk files.
+#' @param path.columns (character) output folder (created if needed).
+#' @param columns (character) columns to extract; default all columns of the first chunk.
+#'   Columns already present in \code{path.columns} are skipped.
+#' @param buffer_size (integer) number of columns processed per pass. Default 100.
+#' @return Called for its side effect (files written).
 #' @export
 RDS2Columns = function(path.rds, path.columns, columns = NULL, buffer_size = 100){
   if(!file.exists(path.columns)) dir.create(path.columns)
@@ -904,6 +1336,17 @@ RDS2Columns = function(path.rds, path.columns, columns = NULL, buffer_size = 100
 }
 
 
+#' Read a table from a folder of per-column RData files
+#'
+#' Reads the column files written by \code{\link{RData2Columns}} into a
+#' \code{data.frame}, optionally filtering rows. \code{integer64} columns are
+#' converted to integer.
+#'
+#' @param path.columns (character) folder containing one \code{.RData} file per column.
+#' @param columns (character) columns to read; default all.
+#' @param filter (list) optional named list of filters (names are column names); each
+#'   filter may have elements \code{min}, \code{max} (inclusive) and \code{domain}.
+#' @return A \code{data.frame}.
 #' @export
 read_table_from_columns.RData = function(path.columns, columns = NULL, filter = NULL){
   ons = list.files(path.columns, full.names = F) %>% stringr::str_remove('.RData')

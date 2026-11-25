@@ -14,6 +14,16 @@ spark.bin(df, binners)
 \code{output_col (character)}: column name to be generated as a result of binning
 \code{ splits (named numeric)}: named numeric vector containing splits and labels for them}
 }
+\value{
+The input table with the binned columns added.
+}
 \description{
 Bins numeric columns of a given table and creates a new column containing categorical bins
+}
+\examples{
+\dontrun{
+df = data.frame(age = c(5, 25, 70))
+spark.bin(df, list(list(input_col = 'age', output_col = 'age_band',
+                        splits = c(young = 0, adult = 18, senior = 65, old = Inf))))
+}
 }

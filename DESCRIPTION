@@ -1,8 +1,8 @@
 Package: rbig
 Type: Package
 Title: A toolbox for R programmers for working with huge size wide tables and data-frames.
-Version: 1.3.4
-Date: 07 June 2021
+Version: 1.3.5
+Date: 2026-11-25
 Author: Nicolas Berta
 Maintainer: Nicolas Berta <nicolas.berta@gmail.com>
 Description: This package provides a useful general library of R functions 
@@ -15,4 +15,6 @@ Collate:
     'io.R'
     'wt.R'
     'rbig.R'
-RoxygenNote: 7.2.0
+Encoding: UTF-8
+Roxygen: list(markdown = FALSE)
+Config/roxygen2/version: 8.1.1
