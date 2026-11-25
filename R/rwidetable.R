@@ -1,6 +1,6 @@
 # Header
-# Filename:       rbig.R
-# Description:    A toolbox for R programmers for working with huge tables and data-frames
+# Filename:       rwidetable.R
+# Description:    rwidetable (formerly rbig): disk-backed wide tables with unlimited columns
 # Version History:
 # 0.0.1 (05 August 2019)     - Initial Issue
 # 1.0.4 (13 October 2020)    - Second Issue WideTable added
@@ -17,17 +17,18 @@
 # 1.2.7 (22 April 2021)      - wt.R updated: function cor.widetable.multicore() added plus cor.widetable() modified: prints progress info
 # 1.3.2 (07 May 2021)        - wt.R updated: function edit_widetable.substitute() added
 # 1.3.4 (07 June 2021)       - wt.R updated to version 1.0.7
-# Description for Roxygen
+# 1.3.5 (26 November 2026)   - Package renamed rbig -> rwidetable and limited to WIDETABLE and the column I/O tools feeding it
+#                              (SQL, Spark, Athena and ODBC helpers removed). Roxygen2 documentation added.
 
-#' rbig
+#' rwidetable: disk-backed wide tables with (virtually) unlimited columns
 #'
-#' This package is a tool-box for working with huge tables and data-frames.
+#' The package provides \code{\link{WIDETABLE}}, a reference class that stores each
+#' column of a table in its own file, so the number of columns is limited only by the
+#' storage space, while the object can be used much like a \code{data.frame}.
+#' It also includes tools that turn parquet files and row chunks into per-column files
+#' (\code{\link{parquet2RDS}}, \code{\link{RDS2Columns}}, ...).
+#'
+#' This package was formerly named \pkg{rbig}.
 #' @author Nicolas Berta
-#'
-#' @docType package
-#' @name rbig
-#' 
-#' 
-#' @include io.R
-#' @include wt.R
-
+#' @keywords internal
+"_PACKAGE"
