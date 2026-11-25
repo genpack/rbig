@@ -2,21 +2,29 @@
 % Please edit documentation in R/wt.R
 \name{WIDETABLE-convert}
 \alias{WIDETABLE-convert}
-\alias{as.data.frame,WIDETABLE-method}
-\alias{as.matrix,WIDETABLE-method}
+\alias{as.data.frame.WIDETABLE}
+\alias{as.matrix.WIDETABLE}
 \title{Convert a WIDETABLE to a data.frame or matrix}
 \usage{
-\S4method{as.data.frame}{WIDETABLE}(x)
+\method{as.data.frame}{WIDETABLE}(x, ...)
 
-\S4method{as.matrix}{WIDETABLE}(x)
+\method{as.matrix}{WIDETABLE}(x, ...)
 }
 \arguments{
 \item{x}{a \code{WIDETABLE}.}
+
+\item{...}{ignored.}
 }
 \value{
 A \code{data.frame} or a \code{matrix}.
 }
 \description{
-Reads all columns (rows of the current row subset) into memory. Make sure the
-result fits in memory.
+Reads all columns (rows of the current row subset) into memory. Make sure the result
+fits in memory.
+}
+\examples{
+folder = tempfile(); dir.create(folder)
+wt = as.WIDETABLE(iris, name = 'iris', path = folder)
+str(as.data.frame(wt))
+unlink(folder, recursive = TRUE)
 }

@@ -4,24 +4,31 @@
 \alias{extract.widetable}
 \title{Subset a WIDETABLE, returning a WIDETABLE}
 \usage{
-extract.widetable(obj, rows, figures, update_meta = F)
+extract.widetable(obj, rows = NULL, figures = NULL, update_meta = FALSE)
 }
 \arguments{
 \item{obj}{a \code{WIDETABLE}.}
 
-\item{rows}{(integer) row indices (relative to \code{obj}); \code{NULL} for all rows.}
+\item{rows}{(integer or logical) rows (relative to \code{obj}); \code{NULL} for all.}
 
-\item{figures}{(character) column names.}
+\item{figures}{(character) column names; \code{NULL} for all.}
 
 \item{update_meta}{(logical) if \code{TRUE}, columns not in memory are read to compute
-exact \code{n_unique} and \code{memsize} for the row subset; otherwise they are
+exact \code{n_unique} and \code{memsize} for the row subset; otherwise these are
 estimated proportionally.}
 }
 \value{
 A \code{WIDETABLE}.
 }
 \description{
-Creates a new \code{WIDETABLE} object that refers to the same column files but to
-a subset of rows and columns. No column data are read from disk (unless
+Creates a new \code{WIDETABLE} object that refers to the same column files but to a
+subset of rows and columns. No column data are read from disk (unless
 \code{update_meta = TRUE}).
+}
+\examples{
+folder = tempfile(); dir.create(folder)
+wt  = as.WIDETABLE(mtcars, name = 'cars', path = folder)
+sub = extract.widetable(wt, rows = 1:10, figures = c('mpg', 'hp'))
+dim(sub)
+unlink(folder, recursive = TRUE)
 }

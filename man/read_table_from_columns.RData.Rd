@@ -18,7 +18,9 @@ filter may have elements \code{min}, \code{max} (inclusive) and \code{domain}.}
 A \code{data.frame}.
 }
 \description{
-Reads the column files written by \code{\link{RData2Columns}} into a
-\code{data.frame}, optionally filtering rows. \code{integer64} columns are
-converted to integer.
+Superseded by \code{\link{WIDETABLE}}, which reads the same folders lazily. Reads the
+column files (each holding one vector) into a \code{data.frame}, optionally keeping
+only the rows that satisfy \code{filter}. \code{integer64} columns are converted to
+numeric.
 }
+\keyword{internal}

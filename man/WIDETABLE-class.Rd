@@ -6,18 +6,25 @@
 \alias{WIDETABLE}
 \title{WIDETABLE: a disk-backed table with (virtually) unlimited columns}
 \description{
-A \code{WIDETABLE} is a reference class that stores every column of a table in a
-separate file inside the folder \code{<path>/<name>}. Only a subset of columns is
-kept in memory (field \code{data}); the total size of the cached columns is kept
-below \code{size_limit} bytes. Columns are read from disk on demand, so the number
-of columns is limited only by the storage space.
+A \code{WIDETABLE} is a reference class that stores every column of a table in its
+own file inside the folder \code{<path>/<name>}, together with a small metadata file
+(\code{.meta.rds}). Columns are read from disk only when they are needed, and a
+size-limited in-memory cache (field \code{data}) keeps the most recently used
+columns, so the number of columns is limited only by the storage space.
 }
 \details{
-A \code{WIDETABLE} can be used much like a \code{data.frame}: \code{wt[rows, cols]},
-\code{wt[[col]]}, \code{nrow}, \code{ncol}, \code{dim}, \code{colnames},
-\code{as.data.frame} and \code{as.matrix} are supported. Subsetting returns a
-\code{data.frame} when the result fits in \code{size_limit}, otherwise a new
-(row/column subset) \code{WIDETABLE}.
+A \code{WIDETABLE} can be used much like a \code{data.frame}:
+\code{wt[rows, cols]}, \code{wt[cols]}, \code{wt[[col]]}, \code{wt[rows, cols] <- value},
+\code{wt[[col]] <- vector}, \code{nrow}, \code{ncol}, \code{dim}, \code{colnames},
+\code{head}, \code{tail}, \code{rbind}, \code{cbind}, \code{as.data.frame},
+\code{as.matrix}, and \code{dplyr::select}/\code{dplyr::pull}.
+Subsetting returns a \code{data.frame} (or a vector) when the estimated size of the
+result fits in \code{size_limit}, otherwise a new \code{WIDETABLE} that refers to a
+subset of rows and columns of the same files.
+
+Because \code{WIDETABLE} is a reference class, modifying methods (adding columns,
+replacing values, binding rows) change the object in place and update the files on
+disk immediately. There is no separate "save" step.
 }
 \section{Fields}{
 
@@ -28,72 +35,144 @@ column files. Default: a random name \code{'WTnnnnn'}.}
 \item{\code{path}}{(character) parent folder of the table folder. Default \code{'.'}.}
 
 \item{\code{meta}}{(data.frame) one row per column with \code{column}, \code{class},
-\code{n_unique} and \code{memsize} (bytes).}
+\code{n_unique} (number of distinct values) and \code{memsize} (bytes in memory).
+For a row subset, \code{n_unique} and \code{memsize} of columns that were not read
+are estimates.}
 
-\item{\code{data}}{(data.frame) in-memory cache of loaded columns.}
+\item{\code{data}}{(data.frame) in-memory cache of loaded columns (rows in \code{row_index}).}
 
-\item{\code{numrows}}{(integer) number of rows of the full table.}
+\item{\code{numrows}}{(integer) number of rows of the full table stored on disk.}
 
 \item{\code{numcols}}{(integer) number of columns.}
 
-\item{\code{row_index}}{(integer) indices of the rows (of the full table) this object
-represents; a subset table refers to a subset of rows of the column files.}
+\item{\code{row_index}}{(integer) the rows (of the full table) this object represents.
+For a full table it is \code{1:numrows}.}
 
-\item{\code{size_limit}}{(numeric) maximum size (bytes) of the in-memory cache.
-Default \code{1e9}.}
+\item{\code{size_limit}}{(numeric) maximum size in bytes of the in-memory cache, and the
+threshold above which subsetting returns a \code{WIDETABLE} instead of a
+\code{data.frame}. Default \code{1e9} (1 GB).}
 
-\item{\code{cell_size}}{(numeric) largest observed size (bytes) per cell, used to estimate
-the memory needed for a subset.}
+\item{\code{cell_size}}{(numeric) largest observed size in bytes per cell.}
 
-\item{\code{format}}{(character) file format of the column files: \code{'rds'} or
-\code{'RData'}.}
+\item{\code{format}}{(character) file format of the column files: \code{'rds'} (default for
+new tables) or \code{'RData'}. For an existing table the stored format is used.}
 }}
 
 \section{Methods}{
 
 \describe{
-\item{\code{add_column(vec, column_name = NULL, save = T, verbose = T)}}{Adds vector vec as a new column named column_name (default 'X<n>').
-The vector length must equal the number of rows (the first column sets it).
-Columns whose name already exists are ignored with a warning.
-If save is TRUE the column file is written. verbose prints a message.}
+\item{\code{add_column(vec, column_name = NULL, verbose = FALSE, save_meta = TRUE, ...)}}{Adds vector vec as a new column named column_name (default 'X<n>') and writes
+its file. The vector length must equal the number of rows (the first column added
+to an empty table sets the number of rows). A column whose name already exists is
+skipped with a warning (use wt[[name]] <- vec to replace it). Returns TRUE if the
+column was added, FALSE otherwise (invisibly).}
 
-\item{\code{add_table(df, save = T)}}{Adds every column of data.frame df as a new column (see add_column).}
+\item{\code{add_table(df, verbose = FALSE, ...)}}{Adds every column of df (a data.frame, tibble or matrix) as a new column.
+Columns whose names already exist are skipped with a warning.}
+
+\item{\code{check_full(action = "This operation")}}{Raises an error if the object is a row subset (used by methods that change the
+number of rows or create column files).}
+
+\item{\code{check_name(cn)}}{Checks that cn is a valid new column name (internal).}
 
 \item{\code{clear()}}{Empties the in-memory cache.}
 
-\item{\code{control_size()}}{Drops cached columns (oldest first) until the cache is below size_limit.}
+\item{\code{column_file(cn)}}{Returns the path of the file storing column cn.}
+
+\item{\code{control_size(keep = character())}}{Drops cached columns, oldest first (except those in keep), until the cache is below
+size_limit.}
+
+\item{\code{fetch_column(cn)}}{Returns column cn (rows in row_index) from the cache or from disk, without
+adding it to the cache.}
 
 \item{\code{initialize(...)}}{Creates a new WIDETABLE or opens an existing one.
-Arguments are field values (name, path, format, size_limit, ...). If folder
-<path>/<name> exists, all column files in it are read and registered.}
+Arguments are field values, typically name, path, and optionally size_limit and
+format. If folder <path>/<name> exists, the table stored there is opened: its
+metadata file is read (columns are loaded lazily). A folder written by an older
+version of rwidetable/rbig (no metadata file) is scanned once and the metadata file is created.}
 
-\item{\code{leftjoin_dataframe(df, by)}}{Left-joins data.frame df on columns by and adds its other columns to the table.}
+\item{\code{is_subset()}}{TRUE if this object represents a subset (or a reordering) of the rows on disk.}
 
-\item{\code{load_column(cn)}}{Returns column cn (rows in row_index), reading it from disk and caching it if
-it is not already in memory.}
+\item{\code{leftjoin_dataframe(df, by)}}{Left-joins data.frame df on the key column(s) by: the columns of df that are not in
+by are added to the table, aligned to the rows of the table. Row count and order are
+preserved. The key must identify the rows of df uniquely; rows of the table with no
+match get NA. Full tables only.}
 
-\item{\code{load_columns(cols)}}{Reads columns cols from disk (rows in row_index) and returns them as a
-data.frame. The memory limit is not checked and the cache is not used.}
+\item{\code{load_column(cn)}}{Returns column cn (rows in row_index). The column is read from disk if it is not
+in the cache, and then cached if it fits in size_limit (older cached columns are
+dropped as needed).}
 
-\item{\code{rbind_dataframe(df)}}{Appends the rows of data.frame df (which must have the same columns) to the
-table and saves the column files.}
+\item{\code{load_columns(cols)}}{Returns columns cols (rows in row_index) as a data.frame. Cached columns are taken
+from memory, the others are read from disk (and not cached). The memory limit is not
+checked: make sure the result fits in memory.}
 
-\item{\code{save_column(cn)}}{Writes in-memory column cn to its file <path>/<name>/<cn>.<format>.}
+\item{\code{meta_file()}}{Returns the path of the metadata file.}
 
-\item{\code{set_value(rows = NULL, cols = NULL, value, save = T)}}{Equivalent to x[rows, cols] <- value. rows and cols default to all.
-cols may be names or indices. If save is TRUE, column files are updated.}
+\item{\code{open_folder()}}{Reads the metadata of the table stored in table_folder() (internal).}
 
-\item{\code{updated_copy()}}{Returns a new WIDETABLE object with the same fields (sharing the same files).}
+\item{\code{rbind_dataframe(df, fill = FALSE)}}{Appends the rows of data.frame df to the table (see rbind_table).}
+
+\item{\code{rbind_table(tbl, fill = FALSE)}}{Appends the rows of tbl (a data.frame, tibble, matrix or another WIDETABLE) to the
+table and updates the column files. Columns are matched by name. If fill is FALSE
+(default) both tables must have the same set of columns; if TRUE, missing values are
+filled with NA and new columns of tbl are added. Full tables only.}
+
+\item{\code{read_file(cn)}}{Reads the full column cn (all rows on disk) from its file.}
+
+\item{\code{refresh()}}{Re-reads the metadata from disk (for example after another object referring to the
+same table added columns) and empties the cache. Full tables only.}
+
+\item{\code{remove_column(cn)}}{Deletes columns cn (character) from the table and from disk (full tables only).}
+
+\item{\code{rename_column(old, new)}}{Renames column old to new (renames its file).}
+
+\item{\code{save_column(cn)}}{Writes the cached column cn to its file (full tables only).}
+
+\item{\code{set_meta(cn, vec)}}{Adds or updates the meta row of column cn from vector vec (internal).}
+
+\item{\code{set_value(rows = NULL, cols = NULL, value, ...)}}{Equivalent to x[rows, cols] <- value. rows (integer positions or logical) and cols
+(names, positions or logical) default to all rows and all columns. New column names
+create new columns (filled with NA outside rows). value is recycled if it has length
+one; a data.frame or list value provides one element per column. The change is
+written to the column files immediately; on a row subset only the selected rows of
+the full column are changed.}
+
+\item{\code{table_folder()}}{Returns the folder containing the column files: <path>/<name>.}
+
+\item{\code{update_disk_meta(cn, full)}}{Updates the metadata of column cn, given its full vector, in this object and in the
+metadata file (internal).}
+
+\item{\code{updated_copy()}}{Returns a copy of this object (the copy refers to the same files).}
+
+\item{\code{write_atomic(obj, file, fmt)}}{Writes obj to file through a temporary file, so a failure never leaves a
+half-written column file (internal).}
+
+\item{\code{write_column(cn, vec)}}{Writes the full column vector vec (length numrows) to the file of column cn.}
+
+\item{\code{write_meta()}}{Writes the metadata file of the full table (internal).}
 }}
 
+\section{Creating and opening tables}{
+
+\code{WIDETABLE(name = 'mytable', path = 'some/folder')} opens the table stored in
+\code{some/folder/mytable} if it exists, otherwise creates an empty table (the folder
+is created when the first column is added). See also \code{\link{as.WIDETABLE}}.
+}
+
 \examples{
-\dontrun{
-wt = WIDETABLE(name = 'cars', path = tempdir())
+folder = tempfile('wt_example_'); dir.create(folder)
+wt = WIDETABLE(name = 'cars', path = folder)
 wt$add_table(mtcars)
 dim(wt)
 wt[1:5, c('mpg', 'cyl')]
-wt[['hp']]
-# re-open the same table later:
-wt2 = WIDETABLE(name = 'cars', path = tempdir())
+wt[['hp']][1:3]
+wt[wt[['cyl']] == 4, 'mpg']
+# re-open the same table later (fast: only the metadata file is read):
+wt2 = WIDETABLE(name = 'cars', path = folder)
+identical(as.data.frame(wt2), as.data.frame(wt))
+unlink(folder, recursive = TRUE)
 }
+\seealso{
+\code{\link{as.WIDETABLE}}, \code{\link{WIDETABLE-subset}},
+  \code{\link{WIDETABLE-replace}}, \code{\link{WIDETABLE-bind}}
 }
